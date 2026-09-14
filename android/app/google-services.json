@@ -1,0 +1,39 @@
+{
+  "project_info": {
+    "project_number": "655575876288",
+    "project_id": "llom-23d56",
+    "storage_bucket": "llom-23d56.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:655575876288:android:e8ccf0db0e190f5158e325",
+        "android_client_info": {
+          "package_name": "com.example.llom"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "655575876288-0tkpbhp5kuavmneq6qpe6kr6f78ecp66.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBuQqbvJzu8u3u39hXgEmojPPkSeJj4QcA"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "655575876288-0tkpbhp5kuavmneq6qpe6kr6f78ecp66.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
