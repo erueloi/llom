@@ -1,4 +1,5 @@
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/theme/app_colors.dart';
@@ -6,14 +7,16 @@ import '../models/user_model.dart';
 import '../providers/library_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/auth_service.dart';
+import '../services/update_service.dart';
 import '../widgets/library_dialogs.dart';
 import '../widgets/release_notes_dialog.dart';
 
 /// Pantalla de Perfil d'Usuari amb preferències d'accessibilitat i gestió de sessió
 class ProfileScreen extends StatelessWidget {
   final AuthService? authService;
+  final UpdateService? updateService;
 
-  const ProfileScreen({super.key, this.authService});
+  const ProfileScreen({super.key, this.authService, this.updateService});
 
   String _getInitialLetter(UserModel? user, User? fbUser) {
     final name = user?.displayName ?? fbUser?.displayName ?? '';
@@ -113,8 +116,85 @@ class ProfileScreen extends StatelessWidget {
     }
   }
 
+  Future<void> _handleCheckUpdate(BuildContext context, UpdateService service) async {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text('Comprovant actualitzacions...'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+
+    final updateInfo = await service.checkUpdate();
+    if (!context.mounted) return;
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    if (updateInfo != null && updateInfo.hasUpdate) {
+      showDialog(
+        context: context,
+        builder: (dialogContext) {
+          return AlertDialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+            ),
+            backgroundColor: AppColors.surface,
+            title: Row(
+              children: [
+                const Icon(Icons.system_update_rounded, color: AppColors.primary, size: 28),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    'Nova versió disponible (v${updateInfo.latestVersion})',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: AppColors.textMain,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            content: const Text(
+              'Hi ha una actualització disponible amb millores i correccions.',
+              style: TextStyle(fontSize: 15, color: AppColors.textMuted),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Més tard', style: TextStyle(color: AppColors.textMuted)),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.of(dialogContext).pop();
+                  service.downloadApk(updateInfo.apkUrl);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: const Text('Descarregar i instal·lar'),
+              ),
+            ],
+          );
+        },
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Ja tens la darrera versió instal·lada.'),
+          backgroundColor: AppColors.primaryDark,
+          behavior: SnackBarBehavior.floating,
+          duration: Duration(seconds: 3),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    final effectiveUpdateService = updateService ?? UpdateService();
     final libraryProvider = context.watch<LibraryProvider?>();
     final settingsProvider = context.watch<SettingsProvider?>();
 
@@ -310,7 +390,9 @@ class ProfileScreen extends StatelessWidget {
                       const Divider(height: 1, color: AppColors.canvas),
                       InkWell(
                         onTap: () => showReleaseNotesModal(context),
-                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+                        borderRadius: !kIsWeb
+                            ? const BorderRadius.vertical(top: Radius.circular(20))
+                            : const BorderRadius.vertical(bottom: Radius.circular(20)),
                         child: Padding(
                           padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
                           child: Row(
@@ -376,6 +458,61 @@ class ProfileScreen extends StatelessWidget {
                           ),
                         ),
                       ),
+                      if (!kIsWeb) ...[
+                        const Divider(height: 1, color: AppColors.canvas),
+                        InkWell(
+                          key: const Key('check_updates_button'),
+                          onTap: () => _handleCheckUpdate(context, effectiveUpdateService),
+                          borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                            child: Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: AppColors.accent.withAlpha(40),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: const Icon(
+                                    Icons.system_update_alt_rounded,
+                                    color: AppColors.primary,
+                                    size: 26,
+                                  ),
+                                ),
+                                const SizedBox(width: 14),
+                                const Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        'Comprovar actualitzacions',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textMain,
+                                        ),
+                                      ),
+                                      Text(
+                                        'Cerca noves versions de Llom per a Android',
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: AppColors.textMuted,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                const Icon(
+                                  Icons.chevron_right_rounded,
+                                  color: AppColors.primary,
+                                  size: 24,
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -395,6 +532,35 @@ class ProfileScreen extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 6),
+
+                // Botó per descarregar APK en entorn Web
+                if (kIsWeb) ...[
+                  SizedBox(
+                    height: 56,
+                    child: ElevatedButton.icon(
+                      key: const Key('download_apk_web_button'),
+                      onPressed: () => effectiveUpdateService.downloadApk('https://llom-23d56.web.app/llom.apk'),
+                      icon: const Icon(Icons.android_rounded, size: 24, color: Colors.white),
+                      label: const Text(
+                        'Descarregar APK per a Android / Tauleta',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                ],
 
                 // Botó per canviar de biblioteca
                 SizedBox(

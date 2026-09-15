@@ -394,15 +394,26 @@
   - Creat [test/release_notes_test.dart](file:///c:/git/llom/test/release_notes_test.dart) comprovant l'obertura, renderització i tancament del modal, així com la integració tàctil des de `ProfileScreen`.
   - **60 de 60 tests superats (100% èxit)** a `flutter test` i 0 advertències a `flutter analyze`.
 
+### ✅ Tasca 22: Sistema de Comprovació d'Actualitzacions i Descàrrega d'APK (Patró Centim)
+- [x] Dependències a [pubspec.yaml](file:///c:/git/llom/pubspec.yaml):
+  - Afegit `http: ^1.3.0` i `url_launcher: ^6.3.1` (amb `package_info_plus` ja configurat).
+- [x] Servei d'actualitzacions a [lib/services/update_service.dart](file:///c:/git/llom/lib/services/update_service.dart):
+  - URL base de metadades remotes: `https://llom-23d56.web.app/version.json`.
+  - Mètode `checkUpdate()`: Consulta `version.json` amb capçaleres `Cache-Control: no-cache` i `Pragma: no-cache`. Llegeix la versió local mitjançant `PackageInfo.fromPlatform()`. Compara versions semàntiques (`major.minor.patch` + build number) i retorna `UpdateInfo(hasUpdate, currentVersion, latestVersion, apkUrl)` o `null` si hi ha un error de xarxa o servidor.
+  - Mètode `downloadApk(url)`: Obre l'enllaç mitjançant `launchUrl` en mode `LaunchMode.externalApplication`.
+  - Comparador semàntic robust `isNewerVersion(remote, local)` tolerant a sufixos `+build`.
+- [x] Integració a [lib/screens/profile_screen.dart](file:///c:/git/llom/lib/screens/profile_screen.dart):
+  - En Web (`kIsWeb`): Botó destacat a «Gestió de Compte»: «Descarregar APK per a Android / Tauleta» que apunta a `https://llom-23d56.web.app/llom.apk`.
+  - A Android (`!kIsWeb`): Opció «Comprovar actualitzacions» a la targeta de versió del sistema. Mostra feedback de comprovació i, si hi ha nova versió, un `AlertDialog` («Nova versió disponible (vX.X.X)», «Descarregar i instal·lar», «Més tard»), o un `SnackBar` discret si ja està al dia («Ja tens la darrera versió instal·lada.»).
+- [x] Comprovació silenciosa a [lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart):
+  - A Android (`!kIsWeb`): Comprovació silenciosa en segon pla en iniciar l'aplicació (`addPostFrameCallback`). Si es detecta una versió més recent, mostra un `SnackBar` flotant amb l'acció «Actualitzar».
+- [x] Suite de tests unitària i de widgets:
+  - Creat [test/update_service_test.dart](file:///c:/git/llom/test/update_service_test.dart) comprovant comparacions de versió semàntica i respostes HTTP (200, 404, 500).
+  - Creat [test/profile_update_test.dart](file:///c:/git/llom/test/profile_update_test.dart) verificant els diàlegs i alertes a `ProfileScreen`.
+  - Creat [test/home_update_test.dart](file:///c:/git/llom/test/home_update_test.dart) verificant la comprovació silenciosa i el botó «Actualitzar» a `HomeScreen`.
+  - **68 de 68 tests superats (100% èxit)** a `flutter test` i 0 advertències a `flutter analyze`.
+
 ---
 
 ## 🚀 Propers Passos
 *(S'aniran afegint a mesura que es defineixin noves tasques)*
-
-
-
-
-
-
-
-

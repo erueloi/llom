@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/constants/mock_data.dart';
@@ -7,6 +8,7 @@ import '../models/bookcase_model.dart';
 import '../models/shelf_unit_model.dart';
 import '../providers/library_provider.dart';
 import '../services/bookcase_service.dart';
+import '../services/update_service.dart';
 import '../widgets/book_card.dart';
 import '../widgets/bookcase_carousel.dart';
 import '../widgets/library_dialogs.dart';
@@ -17,8 +19,9 @@ import 'shelf_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final BookcaseService? bookcaseService;
+  final UpdateService? updateService;
 
-  const HomeScreen({super.key, this.bookcaseService});
+  const HomeScreen({super.key, this.bookcaseService, this.updateService});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -26,6 +29,7 @@ class HomeScreen extends StatefulWidget {
 
 class _HomeScreenState extends State<HomeScreen> {
   late final BookcaseService _bookcaseService;
+  late final UpdateService _updateService;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -36,6 +40,7 @@ class _HomeScreenState extends State<HomeScreen> {
   void initState() {
     super.initState();
     _bookcaseService = widget.bookcaseService ?? BookcaseService();
+    _updateService = widget.updateService ?? UpdateService();
     _searchController.addListener(() {
       final text = _searchController.text.trim().toLowerCase();
       if (_searchQuery != text) {
@@ -44,6 +49,36 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     });
+
+    if (!kIsWeb) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _checkForSilentUpdate());
+    }
+  }
+
+  Future<void> _checkForSilentUpdate() async {
+    try {
+      final updateInfo = await _updateService.checkUpdate();
+      if (!mounted) return;
+      if (updateInfo != null && updateInfo.hasUpdate) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Nova versió disponible (v${updateInfo.latestVersion})'),
+            behavior: SnackBarBehavior.floating,
+            backgroundColor: AppColors.primaryDark,
+            duration: const Duration(seconds: 8),
+            action: SnackBarAction(
+              label: 'Actualitzar',
+              textColor: AppColors.accent,
+              onPressed: () {
+                _updateService.downloadApk(updateInfo.apkUrl);
+              },
+            ),
+          ),
+        );
+      }
+    } catch (_) {
+      // Comprovació silenciosa
+    }
   }
 
   @override
