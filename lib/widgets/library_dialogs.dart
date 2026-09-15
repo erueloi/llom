@@ -1293,3 +1293,224 @@ void showLibrarySelectorSheet(BuildContext context) {
   );
 }
 
+/// Diàleg per editar el nom d'un moble d'estanteria
+Future<void> showEditBookcaseNameDialog(
+  BuildContext context,
+  String libraryId,
+  BookcaseModel bookcase, {
+  BookcaseService? bookcaseService,
+}) async {
+  final nameController = TextEditingController(text: bookcase.name);
+  String? errorMessage;
+  bool isLoading = false;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          Future<void> submit() async {
+            final newName = nameController.text.trim();
+            if (newName.isEmpty) {
+              setState(() {
+                errorMessage = "El nom de l'estanteria no pot estar buit.";
+              });
+              return;
+            }
+
+            setState(() {
+              isLoading = true;
+              errorMessage = null;
+            });
+
+            try {
+              final service = bookcaseService ?? BookcaseService();
+              await service.updateBookcaseName(libraryId, bookcase.id, newName);
+
+              if (context.mounted) {
+                Navigator.of(dialogContext).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Nom canviat a "$newName" correctament!'),
+                    backgroundColor: AppColors.primaryDark,
+                  ),
+                );
+              }
+            } catch (e) {
+              if (context.mounted) {
+                setState(() {
+                  isLoading = false;
+                  errorMessage = "Error en actualitzar: ${e.toString()}";
+                });
+              }
+            }
+          }
+
+          return AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: const Row(
+              children: [
+                Icon(Icons.edit_rounded, color: AppColors.primary, size: 26),
+                SizedBox(width: 10),
+                Text(
+                  'Editar nom',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textMain,
+                  ),
+                ),
+              ],
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 400),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Text(
+                    'Escriu el nou nom per a aquesta estanteria:',
+                    style: TextStyle(fontSize: 15, color: AppColors.textMuted),
+                  ),
+                  const SizedBox(height: 14),
+                  TextField(
+                    controller: nameController,
+                    autofocus: true,
+                    style: const TextStyle(fontSize: 17, color: AppColors.textMain),
+                    decoration: InputDecoration(
+                      hintText: 'Ex: Estanteria Menjador',
+                      prefixIcon: const Icon(Icons.shelves, color: AppColors.textMuted),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                  if (errorMessage != null) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      errorMessage!,
+                      style: TextStyle(fontSize: 14, color: Colors.red.shade700, fontWeight: FontWeight.w600),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel·lar', style: TextStyle(color: AppColors.textMuted, fontSize: 16)),
+              ),
+              ElevatedButton(
+                onPressed: isLoading ? null : submit,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.primary,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: isLoading
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Desar canvis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}
+
+/// Diàleg de confirmació de seguretat per eliminar una estanteria
+Future<void> showDeleteBookcaseDialog(
+  BuildContext context,
+  String libraryId,
+  BookcaseModel bookcase, {
+  BookcaseService? bookcaseService,
+}) async {
+  bool isLoading = false;
+
+  await showDialog<void>(
+    context: context,
+    builder: (dialogContext) {
+      return StatefulBuilder(
+        builder: (context, setState) {
+          Future<void> confirmDelete() async {
+            setState(() {
+              isLoading = true;
+            });
+
+            try {
+              final service = bookcaseService ?? BookcaseService();
+              await service.deleteBookcase(libraryId, bookcase.id);
+
+              if (context.mounted) {
+                Navigator.of(dialogContext).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Estanteria "${bookcase.name}" eliminada.'),
+                    backgroundColor: Colors.red.shade700,
+                  ),
+                );
+              }
+            } catch (e) {
+              if (context.mounted) {
+                setState(() {
+                  isLoading = false;
+                });
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Error en eliminar: ${e.toString()}'),
+                    backgroundColor: Colors.red.shade800,
+                  ),
+                );
+              }
+            }
+          }
+
+          return AlertDialog(
+            backgroundColor: AppColors.surface,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+            title: Row(
+              children: [
+                Icon(Icons.warning_amber_rounded, color: Colors.red.shade700, size: 28),
+                const SizedBox(width: 10),
+                const Text(
+                  'Eliminar estanteria',
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textMain,
+                  ),
+                ),
+              ],
+            ),
+            content: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 420),
+              child: Text(
+                'Segur que vols eliminar definitivament "${bookcase.name}"? '
+                'Tots els llibres catalogats en aquesta estanteria també s\'esborraran.',
+                style: const TextStyle(fontSize: 15, color: AppColors.textMuted, height: 1.4),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('Cancel·lar', style: TextStyle(color: AppColors.textMuted, fontSize: 16)),
+              ),
+              ElevatedButton(
+                key: const Key('confirm_delete_bookcase_button'),
+                onPressed: isLoading ? null : confirmDelete,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red.shade600,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
+                child: isLoading
+                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                    : const Text('Eliminar definitivament', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              ),
+            ],
+          );
+        },
+      );
+    },
+  );
+}

@@ -6,12 +6,18 @@ class BookcaseCard extends StatelessWidget {
   final ShelfUnit unit;
   final VoidCallback onTap;
   final bool isFocused;
+  final VoidCallback? onEdit;
+  final VoidCallback? onDelete;
+  final bool canEdit;
 
   const BookcaseCard({
     super.key,
     required this.unit,
     required this.onTap,
     this.isFocused = true,
+    this.onEdit,
+    this.onDelete,
+    this.canEdit = true,
   });
 
   // Paleta de colors càlids per als lloms simulats
@@ -78,9 +84,9 @@ class BookcaseCard extends StatelessWidget {
                 ),
               ),
 
-              // Base del moble: etiqueta gran i recompte
+              // Base del moble: etiqueta gran i recompte amb menú d'opcions
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 decoration: BoxDecoration(
                   color: AppColors.canvas,
                   borderRadius: const BorderRadius.vertical(bottom: Radius.circular(15)),
@@ -91,46 +97,103 @@ class BookcaseCard extends StatelessWidget {
                     ),
                   ),
                 ),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
+                child: Row(
                   children: [
-                    Text(
-                      unit.name,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(
-                        fontSize: 19,
-                        fontWeight: FontWeight.w800,
-                        color: AppColors.textMain,
-                        letterSpacing: -0.3,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 3),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Icon(
-                          Icons.shelves,
-                          size: 15,
-                          color: AppColors.primary,
-                        ),
-                        const SizedBox(width: 5),
-                        Flexible(
-                          child: Text(
-                            '${unit.shelfCount} ${unit.shelfCount == 1 ? 'balda' : 'baldes'} · ${unit.bookCount} llibres',
+                    Expanded(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            unit.name,
+                            textAlign: TextAlign.center,
                             style: const TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.w600,
-                              color: AppColors.textMuted,
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textMain,
+                              letterSpacing: -0.3,
                             ),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 3),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.shelves,
+                                size: 15,
+                                color: AppColors.primary,
+                              ),
+                              const SizedBox(width: 5),
+                              Flexible(
+                                child: Text(
+                                  '${unit.shelfCount} ${unit.shelfCount == 1 ? 'balda' : 'baldes'} · ${unit.bookCount} llibres',
+                                  style: const TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w600,
+                                    color: AppColors.textMuted,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ],
+                      ),
                     ),
+                    if (canEdit && (onEdit != null || onDelete != null))
+                      PopupMenuButton<String>(
+                        key: Key('bookcase_options_${unit.id}'),
+                        icon: const Icon(Icons.more_vert_rounded, color: AppColors.textMuted, size: 22),
+                        tooltip: 'Opcions de l\'estanteria',
+                        onSelected: (value) {
+                          if (value == 'edit' && onEdit != null) {
+                            onEdit!();
+                          } else if (value == 'delete' && onDelete != null) {
+                            onDelete!();
+                          }
+                        },
+                        itemBuilder: (context) => [
+                          const PopupMenuItem<String>(
+                            value: 'edit',
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.edit_outlined, color: AppColors.textMain, size: 20),
+                                SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Editar nom',
+                                    style: TextStyle(fontWeight: FontWeight.w600),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          PopupMenuItem<String>(
+                            value: 'delete',
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.delete_outline_rounded, color: Colors.red.shade700, size: 20),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Text(
+                                    'Eliminar estanteria',
+                                    style: TextStyle(fontWeight: FontWeight.w600, color: Colors.red.shade700),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
                   ],
                 ),
               ),

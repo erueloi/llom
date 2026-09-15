@@ -13,6 +13,7 @@ void main() {
         room: 'Menjador',
         shelfCount: 5,
         bookCount: 42,
+        order: 3,
         createdAt: now,
       );
 
@@ -21,6 +22,7 @@ void main() {
       expect(map['room'], 'Menjador');
       expect(map['shelfCount'], 5);
       expect(map['bookCount'], 42);
+      expect(map['order'], 3);
       expect(map['createdAt'], isA<Timestamp>());
 
       final restored = BookcaseModel.fromMap(map, 'bc_1');
@@ -29,6 +31,7 @@ void main() {
       expect(restored.room, 'Menjador');
       expect(restored.shelfCount, 5);
       expect(restored.bookCount, 42);
+      expect(restored.order, 3);
       expect(restored.createdAt, now);
     });
 

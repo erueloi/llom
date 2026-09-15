@@ -5,6 +5,7 @@ class BookModel {
   final String title;
   final String author;
   final String shelfCode;
+  final String? bookcaseId;
   final int positionIndex;
   final String? photoUrl;
   final String? notes;
@@ -15,6 +16,7 @@ class BookModel {
     required this.title,
     required this.author,
     required this.shelfCode,
+    this.bookcaseId,
     required this.positionIndex,
     this.photoUrl,
     this.notes,
@@ -27,6 +29,7 @@ class BookModel {
       'title': title,
       'author': author,
       'shelfCode': shelfCode,
+      'bookcaseId': bookcaseId,
       'positionIndex': positionIndex,
       'photoUrl': photoUrl,
       'notes': notes,
@@ -41,6 +44,7 @@ class BookModel {
       title: map['title'] as String? ?? '',
       author: map['author'] as String? ?? '',
       shelfCode: map['shelfCode'] as String? ?? '',
+      bookcaseId: map['bookcaseId'] as String?,
       positionIndex: (map['positionIndex'] as num?)?.toInt() ?? 0,
       photoUrl: map['photoUrl'] as String?,
       notes: map['notes'] as String?,
@@ -54,6 +58,7 @@ class BookModel {
     String? title,
     String? author,
     String? shelfCode,
+    String? bookcaseId,
     int? positionIndex,
     String? photoUrl,
     String? notes,
@@ -64,6 +69,7 @@ class BookModel {
       title: title ?? this.title,
       author: author ?? this.author,
       shelfCode: shelfCode ?? this.shelfCode,
+      bookcaseId: bookcaseId ?? this.bookcaseId,
       positionIndex: positionIndex ?? this.positionIndex,
       photoUrl: photoUrl ?? this.photoUrl,
       notes: notes ?? this.notes,
@@ -93,6 +99,7 @@ class BookModel {
           title == other.title &&
           author == other.author &&
           shelfCode == other.shelfCode &&
+          bookcaseId == other.bookcaseId &&
           positionIndex == other.positionIndex &&
           photoUrl == other.photoUrl &&
           notes == other.notes &&
@@ -104,6 +111,7 @@ class BookModel {
       title.hashCode ^
       author.hashCode ^
       shelfCode.hashCode ^
+      bookcaseId.hashCode ^
       positionIndex.hashCode ^
       photoUrl.hashCode ^
       notes.hashCode ^
@@ -111,6 +119,6 @@ class BookModel {
 
   @override
   String toString() {
-    return 'BookModel(id: $id, title: $title, author: $author, shelfCode: $shelfCode, positionIndex: $positionIndex, photoUrl: $photoUrl, notes: $notes, createdAt: $createdAt)';
+    return 'BookModel(id: $id, title: $title, author: $author, shelfCode: $shelfCode, bookcaseId: $bookcaseId, positionIndex: $positionIndex, photoUrl: $photoUrl, notes: $notes, createdAt: $createdAt)';
   }
 }

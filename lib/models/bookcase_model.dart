@@ -9,6 +9,7 @@ class BookcaseModel {
   final String room;
   final int shelfCount;
   final int bookCount;
+  final int order;
   final DateTime createdAt;
 
   const BookcaseModel({
@@ -17,6 +18,7 @@ class BookcaseModel {
     required this.room,
     required this.shelfCount,
     this.bookCount = 0,
+    this.order = 0,
     required this.createdAt,
   });
 
@@ -27,6 +29,7 @@ class BookcaseModel {
       'room': room,
       'shelfCount': shelfCount,
       'bookCount': bookCount,
+      'order': order,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
@@ -50,6 +53,7 @@ class BookcaseModel {
       room: map['room'] as String? ?? '',
       shelfCount: (map['shelfCount'] as num?)?.toInt() ?? 4,
       bookCount: (map['bookCount'] as num?)?.toInt() ?? 0,
+      order: (map['order'] as num?)?.toInt() ?? 0,
       createdAt: parseCreatedAt(map['createdAt']),
     );
   }
@@ -61,6 +65,7 @@ class BookcaseModel {
     String? room,
     int? shelfCount,
     int? bookCount,
+    int? order,
     DateTime? createdAt,
   }) {
     return BookcaseModel(
@@ -69,6 +74,7 @@ class BookcaseModel {
       room: room ?? this.room,
       shelfCount: shelfCount ?? this.shelfCount,
       bookCount: bookCount ?? this.bookCount,
+      order: order ?? this.order,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -94,14 +100,15 @@ class BookcaseModel {
         other.room == room &&
         other.shelfCount == shelfCount &&
         other.bookCount == bookCount &&
+        other.order == order &&
         other.createdAt == createdAt;
   }
 
   @override
-  int get hashCode => Object.hash(id, name, room, shelfCount, bookCount, createdAt);
+  int get hashCode => Object.hash(id, name, room, shelfCount, bookCount, order, createdAt);
 
   @override
   String toString() {
-    return 'BookcaseModel(id: $id, name: $name, room: $room, shelfCount: $shelfCount, bookCount: $bookCount)';
+    return 'BookcaseModel(id: $id, name: $name, room: $room, shelfCount: $shelfCount, bookCount: $bookCount, order: $order)';
   }
 }

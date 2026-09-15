@@ -7,6 +7,7 @@ class BookSpineWidget extends StatefulWidget {
   final VoidCallback onTap;
   final bool isHighlighted;
   final bool isDimmed;
+  final int? displayIndex;
 
   const BookSpineWidget({
     super.key,
@@ -14,6 +15,7 @@ class BookSpineWidget extends StatefulWidget {
     required this.onTap,
     this.isHighlighted = false,
     this.isDimmed = false,
+    this.displayIndex,
   });
 
   @override
@@ -23,33 +25,53 @@ class BookSpineWidget extends StatefulWidget {
 class _BookSpineWidgetState extends State<BookSpineWidget> {
   bool _isHoveredOrPressed = false;
 
-  // Paleta de colors de coberta alternats segons disseny
+  // Paleta de colors editorials: terracota, blanc porcellana i crema
   static const List<Color> _spineColors = [
+    Color(0xFFE2725B), // Terracota
     Color(0xFFFFFFFF), // Blanc porcellana
-    Color(0xFFF2856D), // Salmó d'acció
-    Color(0xFFF8B4A6), // Rosa pàl·lid
-    Color(0xFFF2EBE9), // Sorra càlida
+    Color(0xFFF5EBE6), // Crema càlid
+    Color(0xFFE88572), // Terracota suau
   ];
 
   Color _getSpineColor() {
     if (widget.isHighlighted) {
-      return AppColors.primary;
+      return AppColors.primaryDark;
     }
     final index = widget.book.title.hashCode.abs() % _spineColors.length;
     return _spineColors[index];
   }
 
   Color _getTextColor(Color bgColor) {
-    if (bgColor == AppColors.primary) {
+    if (bgColor == const Color(0xFFE2725B) ||
+        bgColor == const Color(0xFFE88572) ||
+        bgColor == AppColors.primary ||
+        bgColor == AppColors.primaryDark) {
       return Colors.white;
     }
     return AppColors.textMain;
   }
 
   double _getSpineHeight() {
-    // Variació d'alçada realista entre 185px i 210px
-    final variation = (widget.book.title.length * 7 + widget.book.positionIndex * 3) % 25;
-    return 185.0 + variation;
+    // Variació d'alçada generosa entre 150px i 186px
+    final order = widget.displayIndex ?? widget.book.positionIndex;
+    final variation = (widget.book.title.length * 7 + order * 5) % 36;
+    return 150.0 + variation;
+  }
+
+  double _getSpineWidth() {
+    // Amplada proporcionada entre 40px i 48px
+    final variation = (widget.book.title.length * 3) % 8;
+    return 41.0 + variation;
+  }
+
+  String _getOrderLabel() {
+    if (widget.displayIndex != null) {
+      return '#${widget.displayIndex}';
+    }
+    if (widget.book.positionIndex > 0 && widget.book.positionIndex < 1000) {
+      return '#${widget.book.positionIndex}';
+    }
+    return '#1';
   }
 
   @override
@@ -57,6 +79,8 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
     final spineColor = _getSpineColor();
     final textColor = _getTextColor(spineColor);
     final height = _getSpineHeight();
+    final width = _getSpineWidth();
+    final orderLabel = _getOrderLabel();
 
     // Si està destacat per cerca, es manté elevat permanentment uns 16px
     final double bottomElevation = widget.isHighlighted
@@ -65,7 +89,7 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
 
     return Semantics(
       button: true,
-      label: 'Llibre ${widget.book.title} per ${widget.book.author}, posició ${widget.book.positionIndex}',
+      label: 'Llibre ${widget.book.title} per ${widget.book.author}, posició $orderLabel',
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 250),
         opacity: widget.isDimmed ? 0.4 : 1.0, // Opacitat 0.4 si la cerca no coincideix
@@ -87,11 +111,11 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
                   duration: const Duration(milliseconds: 180),
                   curve: Curves.easeOutCubic,
                   margin: EdgeInsets.only(
-                    right: 5,
+                    right: 4,
                     left: 2,
                     bottom: bottomElevation,
                   ),
-                  width: 58,
+                  width: width,
                   height: height,
                   decoration: BoxDecoration(
                     color: spineColor,
@@ -99,14 +123,16 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
                     border: Border.all(
                       color: widget.isHighlighted
                           ? AppColors.primaryDark
-                          : AppColors.accent.withAlpha(120),
+                          : (spineColor == Colors.white
+                              ? AppColors.accent.withAlpha(150)
+                              : AppColors.accent.withAlpha(90)),
                       width: widget.isHighlighted ? 2.5 : 1.0,
                     ),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withAlpha(bottomElevation > 0 ? 55 : 28),
-                        blurRadius: bottomElevation > 0 ? 10 : 4,
-                        offset: Offset(bottomElevation > 0 ? 3 : 2, bottomElevation > 0 ? -4 : 0),
+                        color: Colors.black.withAlpha(bottomElevation > 0 ? 50 : 25),
+                        blurRadius: bottomElevation > 0 ? 8 : 3,
+                        offset: Offset(bottomElevation > 0 ? 2 : 1, bottomElevation > 0 ? -3 : 0),
                       ),
                       if (widget.isHighlighted)
                         BoxShadow(
@@ -120,9 +146,9 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(5)),
                     child: Stack(
                       children: [
-                        // Nervadures clàssiques superiors
+                        // Nervadures clàssiques superiors (dues línies gravades)
                         Positioned(
-                          top: 12,
+                          top: 10,
                           left: 0,
                           right: 0,
                           child: Column(
@@ -142,8 +168,8 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
 
                         // Títol del llibre en vertical (de baix a dalt)
                         Positioned.fill(
-                          top: 26,
-                          bottom: 34,
+                          top: 24,
+                          bottom: 30,
                           child: Center(
                             child: RotatedBox(
                               quarterTurns: 3,
@@ -155,10 +181,10 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
                                   overflow: TextOverflow.ellipsis,
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
-                                    fontSize: 13.5,
-                                    fontWeight: FontWeight.w800,
+                                    fontSize: 13.0,
+                                    fontWeight: FontWeight.w700,
                                     color: textColor,
-                                    letterSpacing: 0.3,
+                                    letterSpacing: 0.2,
                                   ),
                                 ),
                               ),
@@ -166,7 +192,7 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
                           ),
                         ),
 
-                        // Nervadures clàssiques inferiors i posició física
+                        // Peu del llom: número d'ordre net
                         Positioned(
                           bottom: 0,
                           left: 0,
@@ -174,19 +200,19 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
                           child: Column(
                             children: [
                               Container(
-                                height: 1.5,
-                                color: textColor.withAlpha(50),
+                                height: 1.0,
+                                color: textColor.withAlpha(40),
                               ),
-                              const SizedBox(height: 3),
+                              const SizedBox(height: 2),
                               Text(
-                                '#${widget.book.positionIndex}',
+                                orderLabel,
                                 style: TextStyle(
                                   fontSize: 10.5,
                                   fontWeight: FontWeight.bold,
-                                  color: textColor.withAlpha(180),
+                                  color: textColor.withAlpha(190),
                                 ),
                               ),
-                              const SizedBox(height: 4),
+                              const SizedBox(height: 3),
                             ],
                           ),
                         ),

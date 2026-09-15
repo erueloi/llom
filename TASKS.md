@@ -413,6 +413,77 @@
   - Creat [test/home_update_test.dart](file:///c:/git/llom/test/home_update_test.dart) verificant la comprovació silenciosa i el botó «Actualitzar» a `HomeScreen`.
   - **68 de 68 tests superats (100% èxit)** a `flutter test` i 0 advertències a `flutter analyze`.
 
+### ✅ Tasca 23: Refactorització del flux d'estanteries, BookshelfDetailScreen i Alta Manual de Llibres
+- [x] Models de dades:
+  - Actualitzat [lib/models/bookcase_model.dart](file:///c:/git/llom/lib/models/bookcase_model.dart) afegint el camp `order` per a l'ordenació personalitzada dels mobles.
+  - Actualitzat [lib/models/book_model.dart](file:///c:/git/llom/lib/models/book_model.dart) afegint el camp `bookcaseId` per a consultes directes i esborrats en cascada.
+- [x] Serveis de Firestore a [lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart):
+  - Ordenació automàtica de mobles per `order` i `createdAt`.
+  - Mètode `updateBookcaseName` per canviar el nom del moble.
+  - Mètode `deleteBookcase` amb esborrat en cascada de tots els llibres associats a `libraries/{libraryId}/books`.
+  - Mètodes de gestió de llibres `getBooksForBookcase`, `addBook` (amb increment de `bookCount`) i `deleteBook` (amb decrement).
+- [x] Diàlegs i gestió de mobles a [lib/widgets/library_dialogs.dart](file:///c:/git/llom/lib/widgets/library_dialogs.dart):
+  - `showEditBookcaseNameDialog`: Diàleg modal per canviar el nom del moble.
+  - `showDeleteBookcaseDialog`: Diàleg de confirmació de seguretat destructor abans d'eliminar el moble i els seus llibres.
+- [x] Modal d'alta manual a [lib/widgets/add_manual_book_dialog.dart](file:///c:/git/llom/lib/widgets/add_manual_book_dialog.dart):
+  - `showAddManualBookDialog` amb formulari accessible (Títol obligatori, Autor opcional, Selector Dropdown de baldes 1..N i botó prominent «Desar llibre»).
+- [x] Interfície i navegació:
+  - Actualitzat [lib/widgets/bookcase_card.dart](file:///c:/git/llom/lib/widgets/bookcase_card.dart) afegint menú contextual d'opcions (`PopupMenuButton`) amb «Editar nom» i «Eliminar estanteria».
+  - Actualitzat [lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart):
+    - FAB inferior modificat a **«Afegir estanteria»** (icona `+`) obrint `showAddBookcaseDialog`.
+    - Tap a la targeta d'estanteria que navega a la nova pantalla `BookshelfDetailScreen`.
+  - Nova pantalla [lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart):
+    - Llistat vertical de baldes en gran amb recomptes i llibres en temps real (`StreamBuilder`).
+    - FAB principal amb menú desplegable per a **«Fotografiar balda»** i **«Afegir llibre manualment»**.
+- [x] Suite de tests unitària i de widgets:
+  - Creat [test/add_manual_book_dialog_test.dart](file:///c:/git/llom/test/add_manual_book_dialog_test.dart).
+  - Creat [test/bookshelf_detail_screen_test.dart](file:///c:/git/llom/test/bookshelf_detail_screen_test.dart).
+  - Creat [test/home_screen_actions_test.dart](file:///c:/git/llom/test/home_screen_actions_test.dart).
+  - Actualitzats [test/bookcase_test.dart](file:///c:/git/llom/test/bookcase_test.dart) i [test/library_ui_test.dart](file:///c:/git/llom/test/library_ui_test.dart).
+  - **74 de 74 tests superats (100% èxit)** a `flutter test` i 0 incidències a `flutter analyze`.
+
+### ✅ Tasca 24: Edició / Eliminació de Llibres i Migració a Bottom Modals (Bottom Sheets)
+- [x] Servei de dades a [lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart):
+  - Afegit mètode `updateBook(String libraryId, BookModel book, {String? oldBookcaseId})` per actualitzar títol, autor, balda i ajustar atòmicament els comptadors de `bookCount` si canvia d'estanteria.
+  - Verificat el mètode `deleteBook(String libraryId, String bookId, String bookcaseId)` amb decrement atòmic de comptador.
+- [x] Formulari en Bottom Modal moderna a [lib/widgets/add_manual_book_dialog.dart](file:///c:/git/llom/lib/widgets/add_manual_book_dialog.dart):
+  - Migrat de diàleg modal centrat (`AlertDialog`) a Bottom Sheet (`showModalBottomSheet` / `AddEditBookBottomSheet`).
+  - Nansa d'arrossegament (*drag handle*), cantonades superiors arrodonides (24px) i adaptabilitat dinàmica al teclat (`viewInsets.bottom`).
+  - Suport per a mode alta («Afegir llibre») i mode edició («Editar llibre»), amb pre-emplenat automàtic de dades del llibre existent (`title`, `author`, selector de balda).
+  - Mètodes accessibles `showBookFormBottomSheet`, `showAddManualBookDialog` (retrocompatible) i `showEditBookBottomSheet`.
+- [x] Accions a la pantalla de detall a [lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart):
+  - En prémer un llom de llibre (`BookSpineWidget`), s'obre la Bottom Sheet de detall amb nansa, capçalera, autor, xip de balda i moble.
+  - Botó d'**«Editar»** (`edit_book_button`): Obre immediatament la Bottom Sheet d'edició amb les dades carregades.
+  - Botó d'**«Eliminar»** (`delete_book_button`): Mostra confirmació de seguretat destructiva (`AlertDialog`) i esborra el llibre amb feedback (`SnackBar`).
+- [x] Suite de tests unitària i de widgets:
+  - Creat [test/book_edit_delete_test.dart](file:///c:/git/llom/test/book_edit_delete_test.dart) cobrint la càrrega de dades pre-emplenades, desat de canvis a Firestore, obertura de modal i flux d'eliminació amb confirmació.
+  - **77 de 77 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 25: Recuperació del Disseny Visual de Prestatgeria Física Oberta (sense Cards)
+- [x] Eliminació de contenidors tipus targeta a [lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart):
+  - Suprimit l'embolcall de `Container` amb fons blanc, ombres i marcs aïllats per balda. La pantalla ara transmet la sensació d'un moble d'estanteria contínua de fusta obert.
+- [x] Capçalera neta per balda:
+  - Títol: `Balda {index} · {Posició}` (`Superior`, `Intermèdia`, `Inferior` o `Única`), en 18sp semibold i `AppColors.textMain`.
+  - Subtítol: `{N} llibres` (o `1 llibre` / `0 llibres`), en 14sp i `AppColors.textMuted`.
+  - Acció directa a la dreta: Botó circular amb icona de càmera (`Icons.camera_alt_outlined`) per fotografiar la balda directament.
+- [x] Tauló físic de fusta:
+  - Base física horitzontal de fusta (`#D9C5B2`) de 12px sota els llibres amb vora suau i ombra subtil a la part inferior.
+  - Els llibres reposen directament sobre el tauló alineats a la part inferior.
+- [x] Perfeccionament de [lib/widgets/book_spine_widget.dart](file:///c:/git/llom/lib/widgets/book_spine_widget.dart):
+  - Alçada generosa proporcionada (entre 150px i 186px segons el llibre).
+  - Amplada proporcionada (entre 41px i 48px).
+  - Vores superiors lleugerament arrodonides (`BorderRadius.vertical(top: Radius.circular(6))`).
+  - Dues nervadures clàssiques gravades a la part superior.
+  - Títol en vertical llegible (`RotatedBox` `quarterTurns: 3`), centrat i estilitzat.
+  - Peu del llom: número d'ordre net (`#1`, `#2`, ...), mai IDs interns ni timestamps.
+  - Paleta editorial harmonitzada: terracota (`AppColors.primary`), blanc porcellana (`#FFFFFF` amb vora subtil) i crema càlid (`#F5EBE6`).
+- [x] Estat buit de la balda («Llom fantasma»):
+  - Quan una balda no té llibres, el tauló de fusta es manté sempre visible.
+  - Sobre el tauló es renderitza un llom fantasma estilitzat (alçada 160px, vora translúcida, icona `+` i text vertical *"Afegir llibre / foto"*), que convida a catalogar sense trencar la il·lusió òptica del moble.
+- [x] Verificació i tests:
+  - Actualitzat [test/bookshelf_detail_screen_test.dart](file:///c:/git/llom/test/bookshelf_detail_screen_test.dart) cobrint la nova capçalera, recomptes i llom fantasma.
+  - **77 de 77 tests superats (100% èxit)** a `flutter test` i **0 incidències** a `flutter analyze`.
+
 ---
 
 ## 🚀 Propers Passos

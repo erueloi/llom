@@ -102,7 +102,7 @@ void main() {
       );
 
       // El Floating Action Button ha d'estar amagat
-      expect(find.text('Afegir balda / Foto'), findsNothing);
+      expect(find.text('Afegir estanteria'), findsNothing);
       expect(find.byType(FloatingActionButton), findsNothing);
     });
 
@@ -121,7 +121,7 @@ void main() {
       );
 
       // El Floating Action Button ha de ser visible
-      expect(find.text('Afegir balda / Foto'), findsOneWidget);
+      expect(find.text('Afegir estanteria'), findsOneWidget);
       expect(find.byType(FloatingActionButton), findsOneWidget);
     });
 

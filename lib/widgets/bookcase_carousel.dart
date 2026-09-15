@@ -6,12 +6,18 @@ import 'bookcase_card.dart';
 class BookcaseCarousel extends StatefulWidget {
   final List<ShelfUnit> units;
   final ValueChanged<ShelfUnit> onUnitSelected;
+  final ValueChanged<ShelfUnit>? onEditUnit;
+  final ValueChanged<ShelfUnit>? onDeleteUnit;
+  final bool canEdit;
   final int initialPage;
 
   const BookcaseCarousel({
     super.key,
     required this.units,
     required this.onUnitSelected,
+    this.onEditUnit,
+    this.onDeleteUnit,
+    this.canEdit = true,
     this.initialPage = 0,
   });
 
@@ -123,6 +129,9 @@ class _BookcaseCarouselState extends State<BookcaseCarousel> {
                     child: BookcaseCard(
                       unit: unit,
                       isFocused: isCenter,
+                      canEdit: widget.canEdit,
+                      onEdit: widget.onEditUnit != null ? () => widget.onEditUnit!(unit) : null,
+                      onDelete: widget.onDeleteUnit != null ? () => widget.onDeleteUnit!(unit) : null,
                       onTap: () {
                         if (isCenter) {
                           // Si es toca el moble central, navega al detall

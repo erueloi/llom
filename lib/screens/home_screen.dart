@@ -15,6 +15,7 @@ import '../widgets/library_dialogs.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import '../models/user_model.dart';
 import 'profile_screen.dart';
+import 'bookshelf_detail_screen.dart';
 import 'shelf_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -128,6 +129,21 @@ class _HomeScreenState extends State<HomeScreen> {
           initialShelfId: initialShelfId,
           highlightBookId: highlightBookId,
           initialSearchQuery: initialSearchQuery,
+        ),
+      ),
+    );
+  }
+
+  void _navigateToBookshelfDetail({
+    required BookcaseModel bookcase,
+    required String libraryId,
+  }) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => BookshelfDetailScreen(
+          bookcase: bookcase,
+          libraryId: libraryId,
+          bookcaseService: _bookcaseService,
         ),
       ),
     );
@@ -369,23 +385,26 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       floatingActionButton: canEdit
           ? FloatingActionButton.extended(
+              key: const Key('add_bookcase_fab'),
               onPressed: () {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Preparant càmera per fotografiar baldes...',
-                      style: TextStyle(fontSize: 16),
+                final libId = activeLibrary?.id ?? '';
+                if (libId.isNotEmpty) {
+                  showAddBookcaseDialog(context, libId);
+                } else {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Primer has de tenir una biblioteca activa.'),
+                      behavior: SnackBarBehavior.floating,
                     ),
-                    duration: Duration(seconds: 2),
-                  ),
-                );
+                  );
+                }
               },
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
               elevation: 3,
-              icon: const Icon(Icons.add_a_photo_rounded, size: 26),
+              icon: const Icon(Icons.add_rounded, size: 28),
               label: const Text(
-                'Afegir balda / Foto',
+                'Afegir estanteria',
                 style: TextStyle(
                   fontSize: 16,
                   fontWeight: FontWeight.w800,
@@ -474,7 +493,18 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.only(bottom: 85, top: 6),
         child: BookcaseCarousel(
           units: _units,
-          onUnitSelected: (unit) => _navigateToShelfDetail(bookcase: unit),
+          canEdit: canEdit,
+          onUnitSelected: (unit) {
+            final bookcase = BookcaseModel(
+              id: unit.id,
+              name: unit.name,
+              room: unit.location,
+              shelfCount: unit.shelfCount,
+              bookCount: unit.bookCount,
+              createdAt: DateTime.now(),
+            );
+            _navigateToBookshelfDetail(bookcase: bookcase, libraryId: '');
+          },
         ),
       );
     }
@@ -507,7 +537,29 @@ class _HomeScreenState extends State<HomeScreen> {
           padding: const EdgeInsets.only(bottom: 85, top: 6),
           child: BookcaseCarousel(
             units: units,
-            onUnitSelected: (unit) => _navigateToShelfDetail(bookcase: unit),
+            canEdit: canEdit,
+            onUnitSelected: (unit) {
+              final bookcase = bookcases.firstWhere(
+                (b) => b.id == unit.id,
+                orElse: () => BookcaseModel(
+                  id: unit.id,
+                  name: unit.name,
+                  room: unit.location,
+                  shelfCount: unit.shelfCount,
+                  bookCount: unit.bookCount,
+                  createdAt: DateTime.now(),
+                ),
+              );
+              _navigateToBookshelfDetail(bookcase: bookcase, libraryId: libraryId);
+            },
+            onEditUnit: (unit) {
+              final bookcase = bookcases.firstWhere((b) => b.id == unit.id);
+              showEditBookcaseNameDialog(context, libraryId, bookcase, bookcaseService: _bookcaseService);
+            },
+            onDeleteUnit: (unit) {
+              final bookcase = bookcases.firstWhere((b) => b.id == unit.id);
+              showDeleteBookcaseDialog(context, libraryId, bookcase, bookcaseService: _bookcaseService);
+            },
           ),
         );
       },
