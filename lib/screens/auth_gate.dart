@@ -37,14 +37,23 @@ class _AuthGateState extends State<AuthGate> {
     });
 
     try {
-      final userModel = await _authService.getCurrentUserData() ??
-          UserModel(
-            uid: user.uid,
-            email: user.email ?? '',
-            displayName: user.displayName,
-            activeLibraryId: null,
-            createdAt: DateTime.now(),
-          );
+      UserModel userModel = UserModel(
+        uid: user.uid,
+        email: user.email ?? '',
+        displayName: user.displayName,
+        photoUrl: user.photoURL,
+        activeLibraryId: null,
+        createdAt: DateTime.now(),
+      );
+
+      try {
+        final remoteUser = await _authService.getCurrentUserData();
+        if (remoteUser != null) {
+          userModel = remoteUser;
+        }
+      } catch (e) {
+        debugPrint("No s'han pogut recuperar dades exteses de Firestore: $e");
+      }
 
       if (mounted) {
         final libraryProvider = context.read<LibraryProvider>();

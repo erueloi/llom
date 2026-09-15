@@ -1,0 +1,34 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Comprovació base: l'usuari ha d'estar autenticat
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    // Perfils d'usuari
+    match /users/{userId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Biblioteques i les seves subcol·leccions (com ara 'bookcases')
+    match /libraries/{libraryId} {
+      allow read, write: if isAuthenticated();
+
+      match /{document=**} {
+        allow read, write: if isAuthenticated();
+      }
+    }
+
+    // Baldes / Estanteries
+    match /shelves/{shelfId} {
+      allow read, write: if isAuthenticated();
+    }
+
+    // Llibres
+    match /books/{bookId} {
+      allow read, write: if isAuthenticated();
+    }
+  }
+}

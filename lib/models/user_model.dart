@@ -4,6 +4,7 @@ class UserModel {
   final String uid;
   final String email;
   final String? displayName;
+  final String? photoUrl;
   final String? activeLibraryId;
   final DateTime createdAt;
 
@@ -11,6 +12,7 @@ class UserModel {
     required this.uid,
     required this.email,
     this.displayName,
+    this.photoUrl,
     this.activeLibraryId,
     required this.createdAt,
   });
@@ -21,6 +23,7 @@ class UserModel {
       'uid': uid,
       'email': email,
       'displayName': displayName,
+      'photoUrl': photoUrl,
       'activeLibraryId': activeLibraryId,
       'createdAt': Timestamp.fromDate(createdAt),
     };
@@ -32,6 +35,7 @@ class UserModel {
       uid: uid ?? map['uid'] as String? ?? '',
       email: map['email'] as String? ?? '',
       displayName: map['displayName'] as String?,
+      photoUrl: map['photoUrl'] as String?,
       activeLibraryId: map['activeLibraryId'] as String?,
       createdAt: _parseDateTime(map['createdAt']),
     );
@@ -42,6 +46,7 @@ class UserModel {
     String? uid,
     String? email,
     String? displayName,
+    String? photoUrl,
     String? activeLibraryId,
     DateTime? createdAt,
   }) {
@@ -49,6 +54,7 @@ class UserModel {
       uid: uid ?? this.uid,
       email: email ?? this.email,
       displayName: displayName ?? this.displayName,
+      photoUrl: photoUrl ?? this.photoUrl,
       activeLibraryId: activeLibraryId ?? this.activeLibraryId,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -75,6 +81,7 @@ class UserModel {
           uid == other.uid &&
           email == other.email &&
           displayName == other.displayName &&
+          photoUrl == other.photoUrl &&
           activeLibraryId == other.activeLibraryId &&
           createdAt == other.createdAt;
 
@@ -83,11 +90,12 @@ class UserModel {
       uid.hashCode ^
       email.hashCode ^
       displayName.hashCode ^
+      photoUrl.hashCode ^
       activeLibraryId.hashCode ^
       createdAt.hashCode;
 
   @override
   String toString() {
-    return 'UserModel(uid: $uid, email: $email, displayName: $displayName, activeLibraryId: $activeLibraryId, createdAt: $createdAt)';
+    return 'UserModel(uid: $uid, email: $email, displayName: $displayName, photoUrl: $photoUrl, activeLibraryId: $activeLibraryId, createdAt: $createdAt)';
   }
 }

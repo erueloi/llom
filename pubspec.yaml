@@ -16,7 +16,7 @@ publish_to: 'none' # Remove this line if you wish to publish to pub.dev
 # https://developer.apple.com/library/archive/documentation/General/Reference/InfoPlistKeyReference/Articles/CoreFoundationKeys.html
 # In Windows, build-name is used as the major, minor, and patch parts
 # of the product and file versions while build-number is used as the build suffix.
-version: 1.0.0+1
+version: 1.0.0
 
 environment:
   sdk: ^3.10.7
@@ -45,6 +45,8 @@ dependencies:
   firebase_storage: ^13.5.0
   shared_preferences: ^2.3.2
   provider: ^6.1.2
+  package_info_plus: ^8.1.0
+  flutter_markdown: ^0.7.5
 
 dev_dependencies:
   flutter_test:
@@ -56,6 +58,19 @@ dev_dependencies:
   # package. See that file for information about deactivating specific lint
   # rules and activating additional ones.
   flutter_lints: ^6.0.0
+  flutter_launcher_icons: ^0.13.1
+
+flutter_launcher_icons:
+  android: true
+  ios: false
+  web:
+    generate: true
+    image_path: "assets/images/logo.png"
+    background_color: "#FDF8F6"
+    theme_color: "#F2856D"
+  image_path: "assets/images/logo.png"
+  adaptive_icon_background: "#FDF8F6"
+  adaptive_icon_foreground: "assets/images/logo.png"
 
 dependency_overrides:
   firebase_core_web: 3.10.0
@@ -70,6 +85,10 @@ flutter:
   # included with your application, so that you can use the icons in
   # the material Icons class.
   uses-material-design: true
+
+  assets:
+    - assets/images/
+    - assets/release_notes.md
 
   # To add assets to your application, add an assets section, like this:
   # assets:
@@ -101,3 +120,4 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+

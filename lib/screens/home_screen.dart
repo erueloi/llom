@@ -3,23 +3,29 @@ import 'package:provider/provider.dart';
 import '../core/constants/mock_data.dart';
 import '../core/theme/app_colors.dart';
 import '../models/book_model.dart';
-import '../models/library_model.dart';
+import '../models/bookcase_model.dart';
 import '../models/shelf_unit_model.dart';
 import '../providers/library_provider.dart';
-import '../services/auth_service.dart';
+import '../services/bookcase_service.dart';
 import '../widgets/book_card.dart';
 import '../widgets/bookcase_carousel.dart';
 import '../widgets/library_dialogs.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import '../models/user_model.dart';
+import 'profile_screen.dart';
 import 'shelf_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
-  const HomeScreen({super.key});
+  final BookcaseService? bookcaseService;
+
+  const HomeScreen({super.key, this.bookcaseService});
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  late final BookcaseService _bookcaseService;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
 
@@ -29,6 +35,7 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    _bookcaseService = widget.bookcaseService ?? BookcaseService();
     _searchController.addListener(() {
       final text = _searchController.text.trim().toLowerCase();
       if (_searchQuery != text) {
@@ -117,230 +124,20 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
+  String _getInitialLetter(UserModel? user, User? fbUser) {
+    final name = user?.displayName ?? fbUser?.displayName ?? '';
+    if (name.trim().isNotEmpty) {
+      return name.trim().substring(0, 1).toUpperCase();
+    }
+    final email = user?.email ?? fbUser?.email ?? '';
+    if (email.trim().isNotEmpty) {
+      return email.trim().substring(0, 1).toUpperCase();
+    }
+    return 'U';
+  }
+
   void _showLibrarySelectorSheet(BuildContext context) {
-    final libraryProvider = context.read<LibraryProvider?>();
-    if (libraryProvider == null) return;
-
-    final activeLibrary = libraryProvider.activeLibrary;
-    final userLibraries = libraryProvider.userLibraries;
-    final canEdit = libraryProvider.canEdit;
-
-    showModalBottomSheet<void>(
-      context: context,
-      backgroundColor: AppColors.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
-      ),
-      isScrollControlled: true,
-      builder: (sheetContext) {
-        final librariesToShow = userLibraries.isNotEmpty
-            ? userLibraries
-            : (activeLibrary != null ? [activeLibrary] : <LibraryModel>[]);
-
-        return SafeArea(
-          child: Padding(
-            padding: const EdgeInsets.fromLTRB(24, 20, 24, 24),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
-              children: [
-                Center(
-                  child: Container(
-                    width: 44,
-                    height: 5,
-                    decoration: BoxDecoration(
-                      color: AppColors.textMuted.withAlpha(50),
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 16),
-
-                const Text(
-                  'Les teves biblioteques',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textMain,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                if (librariesToShow.isEmpty)
-                  const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 12.0),
-                    child: Text(
-                      'No hi ha cap biblioteca configurada.',
-                      style: TextStyle(color: AppColors.textMuted, fontSize: 16),
-                    ),
-                  )
-                else
-                  ...librariesToShow.map((lib) {
-                    final isActive = lib.id == activeLibrary?.id;
-                    return InkWell(
-                      onTap: () async {
-                        Navigator.of(sheetContext).pop();
-                        if (!isActive) {
-                          await libraryProvider.switchLibrary(lib);
-                        }
-                      },
-                      borderRadius: BorderRadius.circular(16),
-                      child: Container(
-                        margin: const EdgeInsets.symmetric(vertical: 4),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-                        decoration: BoxDecoration(
-                          color: isActive ? AppColors.accent.withAlpha(40) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(16),
-                          border: Border.all(
-                            color: isActive ? AppColors.accent : Colors.transparent,
-                            width: 1.5,
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.shelves,
-                              color: isActive ? AppColors.primary : AppColors.textMuted,
-                              size: 24,
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    lib.name,
-                                    style: TextStyle(
-                                      fontSize: 17,
-                                      fontWeight: isActive ? FontWeight.bold : FontWeight.w600,
-                                      color: AppColors.textMain,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    'Codi: ${lib.inviteCode} · ${lib.members.length} membres',
-                                    style: const TextStyle(fontSize: 13, color: AppColors.textMuted),
-                                  ),
-                                ],
-                              ),
-                            ),
-                            if (isActive)
-                              const Icon(
-                                Icons.check_circle_rounded,
-                                color: AppColors.primary,
-                                size: 24,
-                              ),
-                          ],
-                        ),
-                      ),
-                    );
-                  }),
-
-                const SizedBox(height: 16),
-                const Divider(color: AppColors.accent, height: 1),
-                const SizedBox(height: 14),
-
-                // Botó "Compartir codi d'invitació" (visible només per a 'owner' o 'editor')
-                if (canEdit && activeLibrary != null) ...[
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppColors.accent.withAlpha(40),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(Icons.share_rounded, color: AppColors.primary),
-                    ),
-                    title: const Text(
-                      "Compartir codi d'invitació",
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.textMain,
-                      ),
-                    ),
-                    subtitle: Text(
-                      'Codi: ${activeLibrary.inviteCode}',
-                      style: const TextStyle(color: AppColors.textMuted),
-                    ),
-                    trailing: const Icon(Icons.chevron_right_rounded, color: AppColors.textMuted),
-                    onTap: () {
-                      Navigator.of(sheetContext).pop();
-                      showShareLibraryDialog(context);
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                ],
-
-                // Accions ràpides inferiors: "Crear nova biblioteca" i "Unir-se amb un altre codi"
-                Row(
-                  children: [
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(sheetContext).pop();
-                          showCreateLibraryDialog(context);
-                        },
-                        icon: const Icon(Icons.add_rounded, size: 18, color: AppColors.primary),
-                        label: const Text(
-                          'Crear nova',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textMain),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: AppColors.accent.withAlpha(150)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: OutlinedButton.icon(
-                        onPressed: () {
-                          Navigator.of(sheetContext).pop();
-                          showJoinLibraryDialog(context);
-                        },
-                        icon: const Icon(Icons.vpn_key_rounded, size: 18, color: AppColors.primary),
-                        label: const Text(
-                          'Unir-me amb codi',
-                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.textMain),
-                        ),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: AppColors.accent.withAlpha(150)),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-
-                // Tancar sessió
-                Center(
-                  child: TextButton.icon(
-                    onPressed: () async {
-                      Navigator.of(sheetContext).pop();
-                      await AuthService().signOut();
-                    },
-                    icon: const Icon(Icons.logout_rounded, size: 18, color: AppColors.primaryDark),
-                    label: const Text(
-                      'Tancar sessió',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: AppColors.primaryDark,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
+    showLibrarySelectorSheet(context);
   }
 
   @override
@@ -351,6 +148,15 @@ class _HomeScreenState extends State<HomeScreen> {
     final libraryProvider = context.watch<LibraryProvider?>();
     final activeLibrary = libraryProvider?.activeLibrary;
     final canEdit = libraryProvider?.canEdit ?? true;
+
+    User? fbUser;
+    try {
+      fbUser = FirebaseAuth.instance.currentUser;
+    } catch (_) {}
+
+    final user = libraryProvider?.currentUser;
+    final photoUrl = user?.photoUrl ?? fbUser?.photoURL;
+    final initialLetter = _getInitialLetter(user, fbUser);
 
     return Scaffold(
       backgroundColor: AppColors.canvas,
@@ -391,27 +197,93 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
             const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-              decoration: BoxDecoration(
-                color: AppColors.accent.withAlpha(50),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(
-                  color: AppColors.accent.withAlpha(100),
-                  width: 1.2,
+            if (activeLibrary != null && activeLibrary.id.isNotEmpty)
+              StreamBuilder<List<BookcaseModel>>(
+                stream: _bookcaseService.getBookcases(activeLibrary.id),
+                builder: (context, snapshot) {
+                  final bookcases = snapshot.data ?? [];
+                  final totalBooks = bookcases.fold<int>(0, (sum, b) => sum + b.bookCount);
+                  if (totalBooks == 0) return const SizedBox.shrink();
+                  return Container(
+                    key: const Key('book_count_badge'),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppColors.accent.withAlpha(50),
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: AppColors.accent.withAlpha(100),
+                        width: 1.2,
+                      ),
+                    ),
+                    child: Text(
+                      '$totalBooks ${totalBooks == 1 ? 'llibre' : 'llibres'}',
+                      style: const TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.primaryDark,
+                      ),
+                    ),
+                  );
+                },
+              )
+            else if (_totalBooksCount > 0)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withAlpha(50),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(
+                    color: AppColors.accent.withAlpha(100),
+                    width: 1.2,
+                  ),
+                ),
+                child: Text(
+                  '$_totalBooksCount llibres',
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primaryDark,
+                  ),
                 ),
               ),
-              child: Text(
-                '$_totalBooksCount llibres',
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.primaryDark,
+          ],
+        ),
+        actions: [
+          Padding(
+            padding: const EdgeInsets.only(right: 16),
+            child: InkWell(
+              onTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ProfileScreen(),
+                  ),
+                );
+              },
+              borderRadius: BorderRadius.circular(20),
+              child: Tooltip(
+                message: 'El teu perfil',
+                child: CircleAvatar(
+                  radius: 20,
+                  backgroundColor: AppColors.accent,
+                  foregroundImage: (photoUrl != null && photoUrl.isNotEmpty)
+                      ? NetworkImage(photoUrl)
+                      : null,
+                  onForegroundImageError: (photoUrl != null && photoUrl.isNotEmpty)
+                      ? (error, stackTrace) {}
+                      : null,
+                  child: Text(
+                    initialLetter,
+                    style: const TextStyle(
+                      color: AppColors.primaryDark,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 22,
+                    ),
+                  ),
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
@@ -451,7 +323,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     Expanded(
                       child: isSearching
                           ? _buildGroupedSearchResults(groupedMatches)
-                          : _buildCarousel(),
+                          : _buildBookcaseContent(activeLibrary?.id ?? '', canEdit),
                     ),
                   ],
                 ),
@@ -561,12 +433,146 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildCarousel() {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 85, top: 6),
-      child: BookcaseCarousel(
-        units: _units,
-        onUnitSelected: (unit) => _navigateToShelfDetail(bookcase: unit),
+  Widget _buildBookcaseContent(String libraryId, bool canEdit) {
+    if (libraryId.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.only(bottom: 85, top: 6),
+        child: BookcaseCarousel(
+          units: _units,
+          onUnitSelected: (unit) => _navigateToShelfDetail(bookcase: unit),
+        ),
+      );
+    }
+
+    return StreamBuilder<List<BookcaseModel>>(
+      stream: _bookcaseService.getBookcases(libraryId),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(
+            child: SizedBox(
+              width: 38,
+              height: 38,
+              child: CircularProgressIndicator(
+                strokeWidth: 3,
+                valueColor: AlwaysStoppedAnimation(AppColors.primary),
+              ),
+            ),
+          );
+        }
+
+        final bookcases = snapshot.data ?? [];
+
+        if (bookcases.isEmpty) {
+          return _buildEmptyState(libraryId, canEdit);
+        }
+
+        final units = bookcases.map((b) => b.toShelfUnit()).toList();
+
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 85, top: 6),
+          child: BookcaseCarousel(
+            units: units,
+            onUnitSelected: (unit) => _navigateToShelfDetail(bookcase: unit),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _buildEmptyState(String libraryId, bool canEdit) {
+    return Center(
+      child: SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 32),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 440),
+          child: Container(
+            padding: const EdgeInsets.all(32),
+            decoration: BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(
+                color: AppColors.accent.withAlpha(120),
+                width: 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppColors.textMain.withAlpha(15),
+                  blurRadius: 20,
+                  offset: const Offset(0, 6),
+                ),
+              ],
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 80,
+                  height: 80,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withAlpha(50),
+                    shape: BoxShape.circle,
+                    border: Border.all(
+                      color: AppColors.primary.withAlpha(80),
+                      width: 2,
+                    ),
+                  ),
+                  child: const Icon(
+                    Icons.shelves,
+                    size: 42,
+                    color: AppColors.primary,
+                  ),
+                ),
+                const SizedBox(height: 20),
+                const Text(
+                  'Encara no hi ha cap estanteria a aquesta biblioteca',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 20,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textMain,
+                    letterSpacing: -0.3,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                const Text(
+                  'Afegeix el teu primer moble per començar a catalogar els llibres de cada balda.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: AppColors.textMuted,
+                    height: 1.4,
+                  ),
+                ),
+                if (canEdit && libraryId.isNotEmpty) ...[
+                  const SizedBox(height: 24),
+                  SizedBox(
+                    width: double.infinity,
+                    height: 54,
+                    child: ElevatedButton.icon(
+                      onPressed: () => showAddBookcaseDialog(context, libraryId),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.primary,
+                        foregroundColor: Colors.white,
+                        elevation: 2,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                      ),
+                      icon: const Icon(Icons.add_rounded, size: 24),
+                      label: const Text(
+                        'Afegir la primera estanteria',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

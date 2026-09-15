@@ -260,10 +260,147 @@
   - La marca d'inicialització `_initializedUid = user.uid` s'estableix sempre dins un bloc `finally`, evitant que qualsevol excepció provoqui crides repetitives i un bucle infinit entre la pantalla de càrrega i «Encara no tens cap biblioteca».
 - [x] Suite de tests ampliada a [test/auth_gate_test.dart](file:///c:/git/llom/test/auth_gate_test.dart) (**45 de 45 tests superats**).
 
+### ✅ Tasca 15: Configuració i desplegament de regles de seguretat de Cloud Firestore
+- [x] Fitxer de regles de seguretat [firestore.rules](file:///c:/git/llom/firestore.rules):
+  - Definició de permisos de lectura i escriptura per a usuaris autenticats (`request.auth != null`) a les col·leccions `users`, `libraries`, `shelves` i `books`.
+- [x] Configuració de projecte a [firebase.json](file:///c:/git/llom/firebase.json) i [.firebaserc](file:///c:/git/llom/.firebaserc):
+  - Vinculat al projecte Firebase `llom-23d56`.
+- [x] Desplegament complet amb Firebase CLI:
+  - Executat `firebase deploy --only firestore:rules --project llom-23d56` amb èxit, permetent la creació i escriptura de biblioteques i usuaris a Firestore.
+
+### ✅ Tasca 16: Gestió d'esborrat/sortida de biblioteques amb salvaguardes i sincronització d'estanteries a Firestore
+- [x] Regles de Firestore a [firestore.rules](file:///c:/git/llom/firestore.rules):
+  - Afegit suport per a subcol·leccions de biblioteques (`libraries/{libraryId}/{document=**}`).
+  - Desplegat a Firebase amb `firebase deploy --only firestore:rules --project llom-23d56`.
+- [x] Model d'estanteria a [lib/models/bookcase_model.dart](file:///c:/git/llom/lib/models/bookcase_model.dart):
+  - Camps: `id`, `name`, `room`, `shelfCount`, `bookCount`, `createdAt`.
+  - Mètodes: `toMap()`, `fromMap()`, `copyWith()` i `toShelfUnit()` per a compatibilitat nativa amb els widgets de carrusel existents.
+- [x] Servei d'estanteries a [lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart):
+  - Stream en temps real `getBookcases(libraryId)` sota `libraries/{libraryId}/bookcases`.
+  - Mètodes `addBookcase(libraryId, bookcase)` i `deleteBookcase(libraryId, bookcaseId)`.
+  - Resilient davant entorns de test sense Firebase inicialitzat.
+- [x] Gestió d'esborrat i sortida a [lib/services/library_service.dart](file:///c:/git/llom/lib/services/library_service.dart) i [lib/providers/library_provider.dart](file:///c:/git/llom/lib/providers/library_provider.dart):
+  - `leaveLibrary({required String libraryId, required String uid})`: elimina l'usuari de `members` i `memberUids`, i canvia automàticament a una altra biblioteca o `NoLibraryScreen`.
+  - `deleteLibrary({required String libraryId, required String ownerUid})`: comprova que sigui l'amo, esborra el document a Firestore i reassigna la biblioteca activa.
+- [x] Diàlegs amb salvaguarda a [lib/widgets/library_dialogs.dart](file:///c:/git/llom/lib/widgets/library_dialogs.dart):
+  - Diàleg de sortida amigable: `showLeaveLibraryDialog`.
+  - Diàleg de seguretat crítica: `showDeleteLibraryDialog` amb advertiment vermell ("Aquesta acció no es pot desfer"), avís d'esborrat de mobles i llibres, i camp de text on cal escriure exactament el nom de la biblioteca per desbloquejar el botó vermell «Eliminar definitivament».
+  - Diàleg de creació d'estanteries: `showAddBookcaseDialog` amb selector d'habitació (`Menjador`, `Estudi`, `Dormitori`, etc.) i nombre de baldes (1-8).
+- [x] Connexió a la pantalla principal [lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart):
+  - Opcions vermelles contextuals al menú desplegable de canvi de biblioteca (Sortir si membre, Eliminar si amo).
+  - Connexió amb `_bookcaseService.getBookcases(activeLibrary.id)`:
+    - Si la biblioteca està buida: Disseny d'acollida net amb botó «Afegir la primera estanteria».
+    - Si té estanteries: Visualització dinàmica en format Cover Flow 3D (`BookcaseCarousel`).
+    - Compatibilitat amb tests de widgets independents mitjançant fallback.
+- [x] Suite de tests unitària i de widgets:
+  - [test/bookcase_test.dart](file:///c:/git/llom/test/bookcase_test.dart): Proves del model i serialització de `BookcaseModel`.
+  - [test/library_safeguard_test.dart](file:///c:/git/llom/test/library_safeguard_test.dart): Proves de salvaguardes del diàleg d'esborrat i sortida.
+  - **50 de 50 tests superats** a `flutter test` i 0 advertències a `flutter analyze`.
+
+### ✅ Tasca 17: Pantalla de Perfil d'Usuari ('ProfileScreen') i Preferències d'Accessibilitat
+- [x] Model d'usuari a [lib/models/user_model.dart](file:///c:/git/llom/lib/models/user_model.dart):
+  - Afegit camp opcional `photoUrl` a `UserModel`, amb persistència a `toMap()`, `fromMap()` i `copyWith()`.
+- [x] Servei d'autenticació i passarel·les:
+  - Propagació de `user.photoURL` a [lib/services/auth_service.dart](file:///c:/git/llom/lib/services/auth_service.dart) (a `signInWithGoogle`, registre i recuperació d'usuari) i [lib/screens/auth_gate.dart](file:///c:/git/llom/lib/screens/auth_gate.dart).
+- [x] Estat de biblioteques i sessió a [lib/providers/library_provider.dart](file:///c:/git/llom/lib/providers/library_provider.dart):
+  - Afegit mètode `clear()` per cancel·lar subscripcions i netejar l'estat local de biblioteques en tancar sessió.
+- [x] Preferències d'accessibilitat globals (UI Sènior):
+  - Creat [lib/providers/settings_provider.dart](file:///c:/git/llom/lib/providers/settings_provider.dart) amb persistència a `SharedPreferences` (`extra_large_text`).
+  - Integrat a [lib/main.dart](file:///c:/git/llom/lib/main.dart) amb escalat tipogràfic global via `MediaQuery.copyWith(textScaler: TextScaler.linear(isExtraLargeText ? 1.25 : 1.0))`.
+- [x] Diàleg compartit de biblioteques a [lib/widgets/library_dialogs.dart](file:///c:/git/llom/lib/widgets/library_dialogs.dart):
+  - Funció `showLibrarySelectorSheet(context)` reutilitzable tant des de la capçalera de `HomeScreen` com des del botó de gestió de compte a `ProfileScreen`.
+- [x] Pantalla de Perfil a [lib/screens/profile_screen.dart](file:///c:/git/llom/lib/screens/profile_screen.dart):
+  - Disseny responsive centrat (`maxWidth: 550px`, fons `AppColors.canvas`).
+  - Capçalera d'usuari: Avatar gran (80px) amb imatge de Google o inicial amb fons `AppColors.accent`, nom complet (24sp negreta), correu i badge arrodonit amb el rol a la biblioteca activa (`👑 Propietari/a`, `✏️ Editor/a`, `👁️ Lector/a`).
+  - Secció d'accessibilitat: Targeta blanca amb `SwitchListTile` per al mode de text extra gran i informació de la versió de l'aplicació (`1.0.0 (v1)`).
+  - Accions de compte: Botó d'acció gran per canviar de biblioteca activa i botó d'estil suau per tancar sessió amb diàleg ràpid de confirmació i retorn a `AuthGate`.
+- [x] Accés des de la capçalera de [lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart):
+  - Afegit `CircleAvatar` tàctil a `AppBar.actions` que mostra la foto o inicial de l'usuari i obre `ProfileScreen`.
+- [x] Suite de tests unitària i de widgets:
+  - Proves de `UserModel` amb `photoUrl` a [test/models_test.dart](file:///c:/git/llom/test/models_test.dart).
+  - Proves integrals a [test/profile_screen_test.dart](file:///c:/git/llom/test/profile_screen_test.dart) per a la renderització d'informació, commutador de text gran, versió, diàleg de tancament de sessió i navegació des de `HomeScreen`.
+  - **55 de 55 tests superats (100% èxit)** i 0 advertències a `flutter analyze`.
+
+### ✅ Tasca 18: Correccions d'avatar d'usuari, comptador dinàmic de llibres i estil de botó destructiu
+- [x] Avatar amb inicial de reserva robusta a [lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart) i [lib/screens/profile_screen.dart](file:///c:/git/llom/lib/screens/profile_screen.dart):
+  - Utilització de `foregroundImage` i `onForegroundImageError` al `CircleAvatar` per gestionar tant `user.photoUrl == null` com errors de descàrrega de xarxa.
+  - Renderització de la inicial del nom en majúscules en to salmó fosc (`AppColors.primaryDark`), `FontWeight.bold`:
+    - Capçalera (`HomeScreen`): mida 22sp.
+    - Perfil (`ProfileScreen`): mida 36sp.
+- [x] Comptador dinàmic de llibres a [lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart):
+  - Eliminat el valor estàtic mockejat «379 llibres».
+  - Connectat a Firestore mitjançant `_bookcaseService.getBookcases(activeLibrary.id)`, sumant el nombre real de llibres (`bookCount`) de totes les estanteries.
+  - S'amaga automàticament el badge (`SizedBox.shrink()`) si la biblioteca no té mobles o llibres (`totalBooks == 0`).
+  - Fallback resilient per a entorns de proves unitàries independents.
+- [x] Estil visual destructiu al diàleg d'eliminació de biblioteca a [lib/widgets/library_dialogs.dart](file:///c:/git/llom/lib/widgets/library_dialogs.dart):
+  - Quan el text no coincideix amb el nom de la biblioteca: botó desactivat amb fons gris suau (`Colors.grey.shade200`) i text atenuat (`Colors.grey.shade500`).
+  - Quan el text coincideix exactament: botó actiu destacat amb fons vermell destructiu (`Colors.red.shade600`) i text blanc en negreta.
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/library_safeguard_test.dart](file:///c:/git/llom/test/library_safeguard_test.dart) verificant la commutació de color de fons del botó destructiu.
+  - Actualitzat [test/profile_screen_test.dart](file:///c:/git/llom/test/profile_screen_test.dart) comprovant els estils de tipografia de l'avatar (22sp i 36sp bold) i el comportament reactiu del badge de llibres (ocult amb 0 llibres, visible amb llibres).
+  - **56 de 56 tests superats (100% èxit)** i 0 advertències a `flutter analyze`.
+
+### ✅ Tasca 19: Identitat de Marca, Icones Web/Android i Pantalla d'Inici (SplashScreen)
+- [x] Registre d'assets i dependències a [pubspec.yaml](file:///c:/git/llom/pubspec.yaml):
+  - Afegit el directori `assets/images/` a la secció `flutter.assets`.
+  - Afegit `package_info_plus: ^8.1.0` a `dependencies` per a lectura dinàmica de versió i compilació.
+  - Afegit `flutter_launcher_icons: ^0.13.1` a `dev_dependencies`.
+  - Configurat el bloc `flutter_launcher_icons` per generar icones d'Android i Web (amb fons `#FDF8F6` i color de tema `#F2856D`).
+- [x] Assets d'imatge de marca:
+  - Generat [assets/images/logo.png](file:///c:/git/llom/assets/images/logo.png) a partir de `logo_llom.png`.
+  - Actualitzat [web/favicon.png](file:///c:/git/llom/web/favicon.png) amb la icona de marca.
+  - Executat `dart run flutter_launcher_icons` generant les icones adaptatives per a Android i Web.
+- [x] Nova Pantalla d'Inici accessible a [lib/screens/splash_screen.dart](file:///c:/git/llom/lib/screens/splash_screen.dart):
+  - Fons net `AppColors.canvas` (`#FDF8F6`).
+  - Contingut vertical centrat:
+    - Logo centrat (`Image.asset("assets/images/logo.png")`, amplada 170px amb fallback resilient d'icona).
+    - Espaiador vertical (24px) i títol de la marca "Llom" (32sp, negreta, letterSpacing -0.5).
+    - Lema editorial: "Per no perdre cap llibre." (20sp, `AppColors.textMain`, semi-bold, estil editorial càlid).
+    - Indicador de càrrega discret (`CircularProgressIndicator` salmó amb opacitat).
+  - Part inferior (`SafeArea`):
+    - Versió dinàmica obtinguda mitjançant `PackageInfo` (ex: "v1.0.0 (1)"), 13sp, color `AppColors.textMuted`.
+- [x] Flux de navegació d'arrencada:
+  - Execució en paral·lel de càrregues prèvies (`PackageInfo`, `SharedPreferences.getInstance()`) i un temps mínim visible de seguretat (~1.7s) per evitar parpellejos bruscos.
+  - Transició suau amb `PageRouteBuilder` (`FadeTransition`) cap a `AuthGate`.
+  - Actualitzat [lib/main.dart](file:///c:/git/llom/lib/main.dart) definint `home: home ?? const SplashScreen()`.
+- [x] Suite de tests unitària i de widgets:
+  - Creat [test/splash_screen_test.dart](file:///c:/git/llom/test/splash_screen_test.dart) verificant la renderització d'elements de marca, lema, indicador i transició suau.
+  - **58 de 58 tests superats (100% èxit)** a `flutter test` i 0 advertències a `flutter analyze`.
+
+### ✅ Tasca 20: Signatura d'Android per a Release i Protecció de Claus
+- [x] Protecció de claus a [.gitignore](file:///c:/git/llom/.gitignore) i [android/.gitignore](file:///c:/git/llom/android/.gitignore):
+  - Afegides les regles per excloure `*.jks`, `*.keystore` i `**/android/key.properties` de qualsevol commit al control de versions.
+- [x] Configuració de Gradle Kotlin DSL a [android/app/build.gradle.kts](file:///c:/git/llom/android/app/build.gradle.kts):
+  - Càrrega de propietats des de `key.properties` (`rootProject.file("key.properties")`) mitjançant `Properties()` i `FileInputStream`.
+  - Creació de la configuració de signatura `signingConfigs.create("release")` associant `keyAlias`, `keyPassword`, `storeFile` i `storePassword`.
+  - Assignació a `buildTypes.release` de `signingConfigs.release` (amb fallback a `debug` si no existeix `key.properties` en entorn local), `isMinifyEnabled = false` i `isShrinkResources = false`.
+- [x] Verificació de build i qualitat:
+  - Executat `.\gradlew.bat app:tasks --dry-run` (`BUILD SUCCESSFUL`).
+  - **58 de 58 tests superats (100% èxit)** a `flutter test` i 0 advertències a `flutter analyze`.
+
+### ✅ Tasca 21: Visor de Release Notes Accessible i Integració a ProfileScreen
+- [x] Dependència i assets a [pubspec.yaml](file:///c:/git/llom/pubspec.yaml):
+  - Afegit `flutter_markdown: ^0.7.5` a `dependencies`.
+  - Declarat `assets/release_notes.md` sota `flutter.assets`.
+  - Creat [assets/release_notes.md](file:///c:/git/llom/assets/release_notes.md) inicial amb les novetats de la versió.
+- [x] Modal inferior accessible a [lib/widgets/release_notes_dialog.dart](file:///c:/git/llom/lib/widgets/release_notes_dialog.dart):
+  - Mètode `showReleaseNotesModal(BuildContext context)` amb `showModalBottomSheet` arrodonit (24px), alçada adaptable fins al 80% i fons `AppColors.canvas`.
+  - Capçalera amb icona corporativa salmó (`Icons.auto_awesome_rounded`), títol «Novetats de la versió» i botó de tancar gran.
+  - Carregador asíncron via `rootBundle.loadString("assets/release_notes.md")` amb missatge amigable si no hi ha contingut.
+  - Renderització Markdown amb `MarkdownStyleSheet` adaptat a la paleta de colors i tipografia accessible de Llom.
+- [x] Integració a [lib/screens/profile_screen.dart](file:///c:/git/llom/lib/screens/profile_screen.dart):
+  - Fila de versió convertida en `InkWell` tàctil amb subtítol «Què hi ha de nou? Toca per veure notes», badge de versió i fletxa `chevron_right_rounded` salmó per obrir el modal.
+- [x] Suite de tests unitària i de widgets:
+  - Creat [test/release_notes_test.dart](file:///c:/git/llom/test/release_notes_test.dart) comprovant l'obertura, renderització i tancament del modal, així com la integració tàctil des de `ProfileScreen`.
+  - **60 de 60 tests superats (100% èxit)** a `flutter test` i 0 advertències a `flutter analyze`.
+
 ---
 
 ## 🚀 Propers Passos
 *(S'aniran afegint a mesura que es defineixin noves tasques)*
+
+
+
 
 
 

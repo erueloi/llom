@@ -3,8 +3,9 @@ import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'firebase_options.dart';
 import 'core/theme/app_theme.dart';
+import 'providers/settings_provider.dart';
 import 'providers/library_provider.dart';
-import 'screens/auth_gate.dart';
+import 'screens/splash_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -23,15 +24,30 @@ class LlomApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MultiProvider(
       providers: [
+        ChangeNotifierProvider<SettingsProvider>(
+          create: (_) => SettingsProvider(),
+        ),
         ChangeNotifierProvider<LibraryProvider>(
           create: (_) => LibraryProvider(),
         ),
       ],
-      child: MaterialApp(
-        title: 'Llom',
-        debugShowCheckedModeBanner: false,
-        theme: AppTheme.lightTheme,
-        home: home ?? const AuthGate(),
+      child: Consumer<SettingsProvider>(
+        builder: (context, settings, _) {
+          return MaterialApp(
+            title: 'Llom',
+            debugShowCheckedModeBanner: false,
+            theme: AppTheme.lightTheme,
+            builder: (context, child) {
+              return MediaQuery(
+                data: MediaQuery.of(context).copyWith(
+                  textScaler: TextScaler.linear(settings.textScaleFactor),
+                ),
+                child: child ?? const SizedBox.shrink(),
+              );
+            },
+            home: home ?? const SplashScreen(),
+          );
+        },
       ),
     );
   }

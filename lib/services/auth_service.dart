@@ -110,6 +110,7 @@ class AuthService {
         uid: user.uid,
         email: user.email ?? email.trim(),
         displayName: user.displayName,
+        photoUrl: user.photoURL,
         activeLibraryId: null,
         createdAt: DateTime.now(),
       );
@@ -166,7 +167,16 @@ class AuthService {
 
       if (userDoc.exists && userDoc.data() != null) {
         // Usuari recurrent: respectem el seu activeLibraryId existent
-        return UserModel.fromMap(userDoc.data()!, user.uid);
+        final existing = UserModel.fromMap(userDoc.data()!, user.uid);
+        if (user.photoURL != null && existing.photoUrl != user.photoURL) {
+          final updated = existing.copyWith(photoUrl: user.photoURL);
+          await _firestore.collection('users').doc(user.uid).set(
+            {'photoUrl': user.photoURL},
+            SetOptions(merge: true),
+          );
+          return updated;
+        }
+        return existing;
       } else {
         // Nou registre amb Google
         final now = DateTime.now();
@@ -174,6 +184,7 @@ class AuthService {
           uid: user.uid,
           email: user.email ?? '',
           displayName: user.displayName ?? '',
+          photoUrl: user.photoURL,
           activeLibraryId: null,
           createdAt: now,
         );
@@ -210,10 +221,10 @@ class AuthService {
 
   /// Recupera les dades completes de l'usuari actual des de Firestore
   Future<UserModel?> getCurrentUserData() async {
-    try {
-      final user = _auth.currentUser;
-      if (user == null) return null;
+    final user = _auth.currentUser;
+    if (user == null) return null;
 
+    try {
       final doc = await _firestore.collection('users').doc(user.uid).get();
       if (doc.exists && doc.data() != null) {
         return UserModel.fromMap(doc.data()!, user.uid);
@@ -223,12 +234,19 @@ class AuthService {
         uid: user.uid,
         email: user.email ?? '',
         displayName: user.displayName,
+        photoUrl: user.photoURL,
         activeLibraryId: null,
         createdAt: DateTime.now(),
       );
-    } catch (e) {
-      throw AuthException(
-        "S'ha produït un error en recuperar les dades de l'usuari: ${e.toString()}",
+    } catch (_) {
+      // Si la consulta a Firestore falla per xarxa o regles, retornem les dades bàsiques de sessió
+      return UserModel(
+        uid: user.uid,
+        email: user.email ?? '',
+        displayName: user.displayName,
+        photoUrl: user.photoURL,
+        activeLibraryId: null,
+        createdAt: DateTime.now(),
       );
     }
   }

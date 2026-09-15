@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:llom/models/library_model.dart';
@@ -36,10 +37,18 @@ class LibraryProvider extends ChangeNotifier {
   bool get hasActiveLibrary => activeLibrary != null;
 
   String get currentRole {
-    final uid = currentUser?.uid;
+    final uid = currentUser?.uid ?? _getFirebaseAuthUser()?.uid;
     if (uid == null || activeLibrary == null) return 'viewer';
     return activeLibrary!.members[uid] ??
         (activeLibrary!.ownerId == uid ? 'owner' : 'viewer');
+  }
+
+  User? _getFirebaseAuthUser() {
+    try {
+      return FirebaseAuth.instance.currentUser;
+    } catch (_) {
+      return null;
+    }
   }
 
   bool get isOwner => currentRole == 'owner';
@@ -130,7 +139,7 @@ class LibraryProvider extends ChangeNotifier {
       await prefs.setString(activeLibraryKey, library.id);
 
       // Actualitzem en segon pla el camp activeLibraryId a users/$uid
-      final uid = currentUser?.uid;
+      final uid = currentUser?.uid ?? _getFirebaseAuthUser()?.uid;
       if (uid != null) {
         await _firestore.collection('users').doc(uid).set(
           {'activeLibraryId': library.id},
@@ -146,6 +155,20 @@ class LibraryProvider extends ChangeNotifier {
 
   /// Crea una biblioteca nova i la selecciona immediatament com a activa
   Future<bool> createAndSelectLibrary(String name) async {
+    if (currentUser == null) {
+      final fbUser = _getFirebaseAuthUser();
+      if (fbUser != null) {
+        currentUser = UserModel(
+          uid: fbUser.uid,
+          email: fbUser.email ?? '',
+          displayName: fbUser.displayName,
+          photoUrl: fbUser.photoURL,
+          activeLibraryId: null,
+          createdAt: DateTime.now(),
+        );
+      }
+    }
+
     final uid = currentUser?.uid;
     if (uid == null) {
       errorMessage = "No hi ha cap usuari autenticat per crear la biblioteca.";
@@ -182,6 +205,20 @@ class LibraryProvider extends ChangeNotifier {
 
   /// S'uneix a una biblioteca mitjançant el codi d'invitació i la selecciona
   Future<bool> joinAndSelectLibrary(String inviteCode) async {
+    if (currentUser == null) {
+      final fbUser = _getFirebaseAuthUser();
+      if (fbUser != null) {
+        currentUser = UserModel(
+          uid: fbUser.uid,
+          email: fbUser.email ?? '',
+          displayName: fbUser.displayName,
+          photoUrl: fbUser.photoURL,
+          activeLibraryId: null,
+          createdAt: DateTime.now(),
+        );
+      }
+    }
+
     final uid = currentUser?.uid;
     if (uid == null) {
       errorMessage = "No hi ha cap usuari autenticat per unir-se a la biblioteca.";
@@ -217,6 +254,96 @@ class LibraryProvider extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  /// Permet a l'usuari sortir d'una biblioteca que no és la seva
+  Future<bool> leaveLibrary(String libraryId) async {
+    final uid = currentUser?.uid ?? _getFirebaseAuthUser()?.uid;
+    if (uid == null) {
+      errorMessage = "No hi ha cap usuari autenticat.";
+      notifyListeners();
+      return false;
+    }
+
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _libraryService.leaveLibrary(libraryId: libraryId, uid: uid);
+
+      userLibraries.removeWhere((lib) => lib.id == libraryId);
+
+      if (activeLibrary?.id == libraryId) {
+        if (userLibraries.isNotEmpty) {
+          await switchLibrary(userLibraries.first);
+        } else {
+          activeLibrary = null;
+          final prefs = _prefsInstance ?? await SharedPreferences.getInstance();
+          await prefs.remove(activeLibraryKey);
+        }
+      }
+
+      isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      errorMessage = e.toString();
+      isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Elimina definitivament una biblioteca si l'usuari n'és el propietari
+  Future<bool> deleteLibrary(String libraryId) async {
+    final uid = currentUser?.uid ?? _getFirebaseAuthUser()?.uid;
+    if (uid == null) {
+      errorMessage = "No hi ha cap usuari autenticat.";
+      notifyListeners();
+      return false;
+    }
+
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+
+    try {
+      await _libraryService.deleteLibrary(libraryId: libraryId, ownerUid: uid);
+
+      userLibraries.removeWhere((lib) => lib.id == libraryId);
+
+      if (activeLibrary?.id == libraryId) {
+        if (userLibraries.isNotEmpty) {
+          await switchLibrary(userLibraries.first);
+        } else {
+          activeLibrary = null;
+          final prefs = _prefsInstance ?? await SharedPreferences.getInstance();
+          await prefs.remove(activeLibraryKey);
+        }
+      }
+
+      isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (e) {
+      errorMessage = e.toString();
+      isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  /// Neteja l'estat del proveïdor i cancel·la subscripcions actives (per tancar sessió)
+  void clear() {
+    _librariesSubscription?.cancel();
+    _librariesSubscription = null;
+    currentUser = null;
+    activeLibrary = null;
+    userLibraries = [];
+    isLoading = false;
+    errorMessage = null;
+    notifyListeners();
   }
 
   @override

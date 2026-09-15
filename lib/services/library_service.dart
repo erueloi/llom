@@ -308,4 +308,83 @@ class LibraryService {
       );
     }
   }
+
+  /// Permet a un membre no propietari sortir d'una biblioteca
+  Future<void> leaveLibrary({
+    required String libraryId,
+    required String uid,
+  }) async {
+    try {
+      final libDoc = await _firestore.collection('libraries').doc(libraryId).get();
+      if (!libDoc.exists || libDoc.data() == null) {
+        throw const LibraryException("No s'ha trobat la biblioteca especificada.");
+      }
+
+      final library = LibraryModel.fromMap(libDoc.data()!, libDoc.id);
+
+      if (library.ownerId == uid) {
+        throw const LibraryException(
+          'El propietari no pot abandonar la biblioteca. Per suprimir-la completament, utilitza l\'opció d\'eliminar.',
+        );
+      }
+
+      if (!library.memberUids.contains(uid)) {
+        throw const LibraryException("No ets membre d'aquesta biblioteca.");
+      }
+
+      final batch = _firestore.batch();
+      batch.update(libDoc.reference, {
+        'members.$uid': FieldValue.delete(),
+        'memberUids': FieldValue.arrayRemove([uid]),
+      });
+
+      final userDoc = await _firestore.collection('users').doc(uid).get();
+      if (userDoc.exists && userDoc.data()?['activeLibraryId'] == libraryId) {
+        batch.update(userDoc.reference, {'activeLibraryId': null});
+      }
+
+      await batch.commit();
+    } catch (e) {
+      if (e is LibraryException) rethrow;
+      throw LibraryException(
+        "S'ha produït un error en sortir de la biblioteca: ${e.toString()}",
+      );
+    }
+  }
+
+  /// Elimina definitivament una biblioteca si qui ho sol·licita és el propietari
+  Future<void> deleteLibrary({
+    required String libraryId,
+    required String ownerUid,
+  }) async {
+    try {
+      final libDoc = await _firestore.collection('libraries').doc(libraryId).get();
+      if (!libDoc.exists || libDoc.data() == null) {
+        throw const LibraryException("No s'ha trobat la biblioteca especificada.");
+      }
+
+      final library = LibraryModel.fromMap(libDoc.data()!, libDoc.id);
+      if (library.ownerId != ownerUid) {
+        throw const LibraryException(
+          'Només el propietari pot eliminar la biblioteca definitivament.',
+        );
+      }
+
+      final batch = _firestore.batch();
+      batch.delete(libDoc.reference);
+
+      final userDoc = await _firestore.collection('users').doc(ownerUid).get();
+      if (userDoc.exists && userDoc.data()?['activeLibraryId'] == libraryId) {
+        batch.update(userDoc.reference, {'activeLibraryId': null});
+      }
+
+      await batch.commit();
+    } catch (e) {
+      if (e is LibraryException) rethrow;
+      throw LibraryException(
+        "S'ha produït un error en eliminar la biblioteca: ${e.toString()}",
+      );
+    }
+  }
 }
+

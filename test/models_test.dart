@@ -112,6 +112,7 @@ void main() {
         uid: 'user_123',
         email: 'test@llom.cat',
         displayName: 'Jeroni',
+        photoUrl: 'https://example.com/avatar.jpg',
         activeLibraryId: 'lib_abc',
         createdAt: now,
       );
@@ -120,6 +121,7 @@ void main() {
       expect(map['uid'], 'user_123');
       expect(map['email'], 'test@llom.cat');
       expect(map['displayName'], 'Jeroni');
+      expect(map['photoUrl'], 'https://example.com/avatar.jpg');
       expect(map['activeLibraryId'], 'lib_abc');
       expect(map['createdAt'], isA<Timestamp>());
 
@@ -127,6 +129,7 @@ void main() {
       expect(parsed.uid, user.uid);
       expect(parsed.email, user.email);
       expect(parsed.displayName, user.displayName);
+      expect(parsed.photoUrl, user.photoUrl);
       expect(parsed.activeLibraryId, user.activeLibraryId);
       expect(
         parsed.createdAt.millisecondsSinceEpoch ~/ 1000,
@@ -138,17 +141,20 @@ void main() {
       final user = UserModel(
         uid: 'u1',
         email: 'original@llom.cat',
+        photoUrl: 'https://example.com/old.jpg',
         createdAt: now,
       );
 
       final updated = user.copyWith(
         displayName: 'Nou Nom',
+        photoUrl: 'https://example.com/new.jpg',
         activeLibraryId: 'lib_xyz',
       );
 
       expect(updated.uid, 'u1');
       expect(updated.email, 'original@llom.cat');
       expect(updated.displayName, 'Nou Nom');
+      expect(updated.photoUrl, 'https://example.com/new.jpg');
       expect(updated.activeLibraryId, 'lib_xyz');
       expect(updated.createdAt, now);
     });
