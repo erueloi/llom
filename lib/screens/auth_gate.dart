@@ -109,7 +109,7 @@ class _AuthGateState extends State<AuthGate> {
 
         // Si l'usuari té biblioteca activa -> HomeScreen
         if (libraryProvider.hasActiveLibrary) {
-          return const HomeScreen();
+          return const HomeScreen(promptApiKeyIfMissing: true);
         }
 
         // Si no en té cap activa -> NoLibraryScreen

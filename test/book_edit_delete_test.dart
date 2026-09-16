@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:http/http.dart' as http;
+import 'package:http/testing.dart';
 import 'package:provider/provider.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:llom/models/book_model.dart';
 import 'package:llom/models/bookcase_model.dart';
 import 'package:llom/models/library_model.dart';
@@ -8,6 +11,7 @@ import 'package:llom/models/user_model.dart';
 import 'package:llom/providers/library_provider.dart';
 import 'package:llom/screens/bookshelf_detail_screen.dart';
 import 'package:llom/services/bookcase_service.dart';
+import 'package:llom/services/book_enrichment_service.dart';
 import 'package:llom/widgets/add_manual_book_dialog.dart';
 
 class MockBookcaseServiceForEditDelete extends BookcaseService {
@@ -51,6 +55,8 @@ class MockLibraryProviderForEditDelete extends LibraryProvider {
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues({});
   final now = DateTime(2026, 9, 15);
   final testBookcase = BookcaseModel(
     id: 'bc_1',
@@ -69,6 +75,7 @@ void main() {
     shelfCode: 'bc_1-B2',
     bookcaseId: 'bc_1',
     positionIndex: 1,
+    synopsis: 'Novel·la clàssica de Maria Barbal.',
     createdAt: now,
   );
 
@@ -97,6 +104,9 @@ void main() {
           bookcase: testBookcase,
           libraryId: 'lib_test',
           bookcaseService: service,
+          enrichmentService: BookEnrichmentService(
+            httpClient: MockClient((_) async => http.Response('{"totalItems": 0, "items": []}', 200)),
+          ),
         ),
       ),
     );

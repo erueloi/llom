@@ -484,7 +484,266 @@
   - Actualitzat [test/bookshelf_detail_screen_test.dart](file:///c:/git/llom/test/bookshelf_detail_screen_test.dart) cobrint la nova capçalera, recomptes i llom fantasma.
   - **77 de 77 tests superats (100% èxit)** a `flutter test` i **0 incidències** a `flutter analyze`.
 
+### ✅ Tasca 26: Actualització integral del README.md i creació d'AGENTS.md / ARCHITECTURE.md
+- [x] Actualització exhaustiva de [README.md](file:///c:/git/llom/README.md):
+  - Descripció del concepte de prestatgeria oberta física (sense contenidors Card).
+  - Especificació dels lloms editorials realistes (`BookSpineWidget`).
+  - Documentació dels Bottom Modals per a formularis i detalls de llibres.
+  - Multi-tenència i gestió col·laborativa de biblioteques amb codis d'invitació de 6 caràcters.
+  - Sistema d'actualitzacions OTA i descàrrega d'APK directa a la Web (Patró Centim).
+  - Estructura de carpetes, instruccions de desenvolupament local i comanda de releases automatitzada (`release.ps1`).
+- [x] Creació de la guia tècnica permanent per a IA a [AGENTS.md](file:///c:/git/llom/AGENTS.md):
+  - Filosofia del projecte i directrius visuals inviolables (tauló `#D9C5B2` de 12px, proporcions de llom 41-48px x 150-186px, ordre `#1`, `#2` al peu, llom fantasma).
+  - Esquema detallat de col·leccions Firestore (`users`, `libraries`, `bookcases`, `books`).
+  - Regles d'integritat: transaccions atòmiques de `bookCount` i esborrat en cascada.
+  - Arquitectura de capes (UI, Providers, Services, Backend).
+  - Regles d'or per a agents: idioma català, protecció de `BuildContext` a través d'async gaps, prevenció de dependències de plataforma web (`dart:io`), obligació de 100% èxit en tests i zero advertències a `flutter analyze`.
+- [x] Creació de [docs/ARCHITECTURE.md](file:///c:/git/llom/docs/ARCHITECTURE.md) com a resum d'arquitectura i pont d'enllaç ràpid cap a `AGENTS.md`.
+- [x] Verificació:
+  - **77 de 77 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 27: Connexió del Cercador a Cloud Firestore i Navegació Real a BookshelfDetailScreen
+- [x] Servei de dades a [lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart):
+  - Afegit mètode reactiu `getAllBooks(String libraryId)` per escoltar tots els llibres de la biblioteca sencera en temps real (`Stream<List<BookModel>>`).
+- [x] Cercador reactiu a [lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart):
+  - Connectat el cercador als llibres reals de Firestore quan hi ha una biblioteca activa (`activeLibrary.id.isNotEmpty`).
+  - Si la biblioteca té 0 llibres a Firestore, mostra l'estat net: *"No s'ha trobat cap llibre. Encara no hi ha cap llibre catalogat en aquesta biblioteca."* (sense carregar cap dada mockejada).
+  - Quan hi ha llibres, s'agrupen per les estanteries reals de Firestore (`BookcaseModel`) amb el nom i estança del moble.
+  - Navegació directa a [lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart) passant el moble real i el llibre seleccionat (`highlightBookId`).
+  - Conservat el fallback net de mock per a entorns de prova sense sessió activa (retrocompatibilitat amb `widget_test.dart`).
+- [x] Millores a [lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart):
+  - Suport per a `highlightBookId` i `initialSearchQuery`.
+  - Afegida la barra de cerca interna dins del moble («Cerca un llibre en aquesta estanteria...»).
+  - Ressaltat visual del llom amb fons destacat i fletxa taronja descendent (`arrow_downward_rounded`) gràcies a `BookSpineWidget` (`isHighlighted: true`, `isDimmed: true`).
+- [x] Suite de tests unitària i de widgets:
+  - Creat [test/home_search_firebase_test.dart](file:///c:/git/llom/test/home_search_firebase_test.dart) cobrint la cerca en biblioteques buides (0 llibres), cerca real amb navegació a `BookshelfDetailScreen`, i cerca interna a la pantalla del moble.
+  - **80 de 80 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 28: Captura i Detecció Visual de Baldes amb Gemini Flash, Revisió Interactiva i Firebase Storage
+- [x] Dependències i permisos del projecte:
+  - Afegit SDK oficial de Gemini `google_generative_ai: ^0.4.6` a [pubspec.yaml](file:///c:/git/llom/pubspec.yaml).
+  - Afegit permís de càmera `<uses-permission android:name="android.permission.CAMERA"/>` a [android/app/src/main/AndroidManifest.xml](file:///c:/git/llom/android/app/src/main/AndroidManifest.xml).
+  - Creat [storage.rules](file:///c:/git/llom/storage.rules) i vinculat a [firebase.json](file:///c:/git/llom/firebase.json) permetent lectura/escriptura a usuaris autenticats sota `libraries/{libraryId}/{allPaths=**}`.
+- [x] Models de dades:
+  - Creat [lib/models/detected_book_spine.dart](file:///c:/git/llom/lib/models/detected_book_spine.dart) (`DetectedBookSpine`) amb coordenades normalitzades (0-1000) `box_2d` (`[ymin, xmin, ymax, xmax]`), serialització resilient (`fromMap`, `toMap`, `copyWith`) i mètode de conversió a `BookModel`.
+  - Actualitzat [lib/models/book_model.dart](file:///c:/git/llom/lib/models/book_model.dart) amb el camp opcional `box` (`List<int>?`) mantenint retrocompatibilitat.
+- [x] Servei de Visió amb Gemini Flash ([lib/services/shelf_vision_service.dart](file:///c:/git/llom/lib/services/shelf_vision_service.dart)):
+  - Model `gemini-1.5-flash` amb mode de resposta JSON forçat (`responseMimeType: 'application/json'`).
+  - Prompt del sistema d'alta precisió per segmentar i catalogar cada llom d'esquerra a dreta amb `box_2d`, `label` i `author`.
+  - Gestió segura de `GEMINI_API_KEY`: font primària `const String.fromEnvironment("GEMINI_API_KEY")`, fallback a `SharedPreferences`, i modal Bottom Sheet net per demanar la clau i desar-la localment si és absent.
+  - Ordenació automàtica dels lloms d'esquerra a dreta segons la coordenada `xmin`.
+- [x] Servei de persistència a Firebase ([lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart)):
+  - Mètode `saveCatalogedShelf`: puja la imatge a `libraries/{libraryId}/shelves/{bookcaseId}_shelf_{shelfIndex}.jpg` a Firebase Storage, desa tots els llibres en batch a Cloud Firestore i incrementa atòmicament el camp `bookCount` del moble.
+- [x] Pantalla de Revisió Interactiva ([lib/screens/shelf_review_screen.dart](file:///c:/git/llom/lib/screens/shelf_review_screen.dart)):
+  - Visor d'imatge interactiu amb zoom i panoràmica (`InteractiveViewer`).
+  - Renderitzat de caixes delimitadores translúcides amb etiqueta flotant per a cada llibre.
+  - Modal Bottom Sheet per editar títol i autor o eliminar falsos positius.
+  - Botó ràpid per afegir lloms manualment no detectats (`btn_add_spine_manual`).
+  - Botó d'acció inferior per confirmar i desar la balda («Desar balda (N llibres)»).
+- [x] Integració a [lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart):
+  - Optimització de captura a `ImagePicker`: `maxWidth: 2048`, `maxHeight: 2048`, `imageQuality: 85`.
+  - Selector de balda des del FAB d'afegir contingut («Fotografiar balda») i botó directe a la capçalera de cada balda.
+  - Diàleg de càrrega modal («Processant els llibres amb el far...») durant l'anàlisi de Gemini i navegació directa a `ShelfReviewScreen`.
+- [x] Suite de tests unitària i de widgets:
+  - Creat [test/shelf_vision_service_test.dart](file:///c:/git/llom/test/shelf_vision_service_test.dart) (7 tests).
+  - Creat [test/shelf_review_screen_test.dart](file:///c:/git/llom/test/shelf_review_screen_test.dart) (5 tests).
+  - Actualitzat [test/bookshelf_detail_screen_test.dart](file:///c:/git/llom/test/bookshelf_detail_screen_test.dart) (4 tests).
+  - **94 de 94 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 29: Configuració d'Entorn Segur per a GEMINI_API_KEY, CI/CD i Gestió Local
+- [x] Protecció de secrets a Git [.gitignore](file:///c:/git/llom/.gitignore):
+  - Afegit `.vscode/`, `*.env` i `*.env.json` per evitar qualsevol pujada accidental de claus o configuracions locals al repositori remot.
+  - Verificat amb `git status` que [.vscode/launch.json](file:///c:/git/llom/.vscode/launch.json) no queda marcat ni seguit pel control de versions.
+- [x] Configuració de depuració local a [.vscode/launch.json](file:///c:/git/llom/.vscode/launch.json):
+  - Creat perfil d'arrencada «Llom (Debug)» per a Flutter amb pas de clau per argument `--dart-define GEMINI_API_KEY=...`.
+- [x] Actualització del flux de CI/CD a [.github/workflows/deploy.yml](file:///c:/git/llom/.github/workflows/deploy.yml):
+  - Pas «Build APK (Release per a tauleta/mòbil)»: afegit `--dart-define=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}`.
+  - Pas «Build Web (Release)»: afegit `--dart-define=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }}`.
+- [x] Gestió i depuració de clau a la interfície de l'aplicació:
+  - Comprovació automàtica a l'obertura de l'aplicació (`AuthGate` -> `HomeScreen`) que demana la clau en una Bottom Sheet neta si no està configurada a l'entorn ni al dispositiu.
+  - Afegida opció a [lib/screens/profile_screen.dart](file:///c:/git/llom/lib/screens/profile_screen.dart) (`profile_gemini_key_tile`) per visualitzar l'estat («Configurada al dispositiu», «Injectada per entorn», «Sense configurar»), modificar-la o eliminar-la en qualsevol moment.
+- [x] Verificació de qualitat:
+  - Actualitzats [test/profile_screen_test.dart](file:///c:/git/llom/test/profile_screen_test.dart) i [test/release_notes_test.dart](file:///c:/git/llom/test/release_notes_test.dart).
+  - **95 de 95 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 30: Actualització de Models de Gemini Flash i Gestió de Quotes/Facturació
+- [x] Resolució del model retirat `gemini-1.5-flash` a [lib/services/shelf_vision_service.dart](file:///c:/git/llom/lib/services/shelf_vision_service.dart):
+  - Google ha descatalogat `models/gemini-1.5-flash` a l'API v1beta retornant error 404 (Not Found).
+  - Migrat el servei a una llista resilient de models candidats: `gemini-flash-latest`, `gemini-3.6-flash`, `gemini-3.5-flash` i `gemini-2.5-flash`.
+  - Prova automàtica del següent model candidat en cas de 404 de l'API.
+- [x] Diagnosi i gestió de crèdits/facturació (Error 429 `RESOURCE_EXHAUSTED`):
+  - Identificada la resposta de Google: *"Your prepayment credits are depleted. Please go to AI Studio..."*.
+  - Creat `GeminiVisionException` per capturar i formatar de manera clara els errors de quota (429), clau incorrecta (403) i models no disponibles (404).
+- [x] Experiència d'usuari a [lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart):
+  - Afegida l'acció interactiva «Canviar clau» directament a la SnackBar d'error per obrir el selector de clau sense haver de sortir de la pantalla.
+- [x] Verificació de qualitat:
+  - Actualitzat [test/shelf_vision_service_test.dart](file:///c:/git/llom/test/shelf_vision_service_test.dart).
+  - **97 de 97 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 31: Desplaçament Horitzontal amb Ratolí a Web/Desktop i Detall Enriquit amb Google Books
+- [x] Desplaçament horitzontal amb ratolí i trackpad:
+  - Definit `AppScrollBehavior` a [lib/main.dart](file:///c:/git/llom/lib/main.dart) que hereta de `MaterialScrollBehavior` amb `dragDevices: {PointerDeviceKind.touch, PointerDeviceKind.mouse, PointerDeviceKind.trackpad}`.
+  - Assignat `scrollBehavior: const AppScrollBehavior()` al `MaterialApp` principal, permetent arrossegar i navegar pels lloms de les baldes amb ratolí sense necessitat de pantalla tàctil.
+- [x] Model de dades de llibre ampliat a [lib/models/book_model.dart](file:///c:/git/llom/lib/models/book_model.dart):
+  - Afegits els camps d'enriquiment `synopsis` (String?), `coverUrl` (String?), `pageCount` (int?), `publishedYear` (int?) i `infoUrl` (String?).
+  - Actualitzats els mètodes de serialització (`toMap`, `fromMap`), mètode immutable `copyWith`, i operadors d'igualtat i `hashCode`.
+- [x] Servei d'enriquiment amb Google Books ([lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart)):
+  - Consulta l'API pública de Google Books (`https://www.googleapis.com/books/v1/volumes?q=intitle:{title}+inauthor:{author}&maxResults=1`).
+  - Neteja automàtica d'etiquetes HTML de la descripció (`cleanHtml`).
+  - Normalització de les URLs de portades a HTTPS (`http://` -> `https://`).
+  - Extracció resilient de l'any de publicació a partir de cadenes de data (`YYYY-MM-DD` o `YYYY`).
+  - Sistema de memòria cau en memòria (`_cache`) per evitar peticions duplicades o innecessàries.
+  - Mètode `enrichAndPersistBook` per desar automàticament les dades enriquides al document del llibre a Cloud Firestore.
+- [x] Nova Bottom Sheet moderna de detall del llibre ([lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart)):
+  - Capçalera amb coberta oficial d'alta qualitat i fallback al llom estilitzat realista de Llom si no té portada.
+  - Títol de llibre prominent amb tipografia nítida i autor.
+  - Fila de xips informatius de localització física (moble, balda, nombre de pàgines i any de publicació).
+  - Secció de sinopsi desplegable amb efecte de shimmer/esquelet durant la càrrega des de l'API de Google Books.
+  - Botó d'acció primari destacat «Localitzar a la balda»:
+    - Obre un visor interactiu (`_BookShelfVisualLocatorDialog`) amb la foto de la balda (`InteractiveViewer`) ressaltant el rectangle del llibre amb coordenades normalitzades 0-1000 i una bafarada informativa amb el títol.
+  - Fila d'accions secundàries:
+    - Botó d'enllaç extern a Google Books (`url_launcher`).
+    - Botó d'editar llibre (`canEdit: true`).
+    - Botó d'eliminar llibre amb confirmació destructiva (`AlertDialog`).
+- [x] Integració a la pantalla de detall d'estanteria ([lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart)):
+  - Substituït el modal anterior per la invocació unificada `showBookDetailBottomSheet`.
+  - Injecció opcional del servei d'enriquiment per facilitar tests i desacoblament.
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/models_test.dart](file:///c:/git/llom/test/models_test.dart) verificant la serialització dels nous camps.
+  - Creat [test/book_enrichment_service_test.dart](file:///c:/git/llom/test/book_enrichment_service_test.dart) (5 tests complets per a HTML, HTTPS, anys, APIs i Firestore).
+  - Creat [test/book_detail_bottom_sheet_test.dart](file:///c:/git/llom/test/book_detail_bottom_sheet_test.dart) (7 tests per a UI, sinopsi, localitzador visual, permisos i scroll behavior).
+  - **109 de 109 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 32: Cerca Resilient a Google Books, Format de URLs a Storage i Gestió de CORS a Web
+- [x] Resiliència a la cerca de Google Books ([lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart)):
+  - Creat `cleanSearchTerm` per netejar caràcters de puntuació extres (comes, cometes, guions, dos punts, etc.) abans d'enviar la consulta.
+  - Implementat mecanisme resilient de doble intent:
+    * **Intent 1 (precís)**: Cerca amb títol i autor nets entre cometes (`intitle:"${cleanTitle}"+inauthor:"${cleanAuthor}"`).
+    * **Intent 2 (tolerant)**: Fallback automàtic si el primer intent retorna `totalItems == 0` fent cerca oberta (`q=${Uri.encodeComponent("$cleanTitle $cleanAuthor")}`).
+  - Enllaç de fallback per a `infoUrl`: Si l'API no retorna `infoLink` directe o és nul, assigna automàticament `https://books.google.com/books?q=${Uri.encodeComponent("$cleanTitle $cleanAuthor")}` en lloc de cerques genèriques.
+- [x] Persistència de la imatge a Firebase Storage ([lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart)):
+  - Assegurat que `saveCatalogedShelf` espera l'execució de `uploadTask`, obté el `downloadUrl` públic complet (`final snapshot = await uploadTask; final downloadUrl = await snapshot.ref.getDownloadURL();`) i l'assigna al camp `photoUrl` de cada llibre creat a Firestore.
+- [x] Gestió robusta d'imatges a Flutter Web i depuració de CORS ([lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart) i [lib/screens/shelf_review_screen.dart](file:///c:/git/llom/lib/screens/shelf_review_screen.dart)):
+  - Afegits `loadingBuilder` amb indicadors centrats i `errorBuilder` detallats tant a la portada com a la fotografia de la balda (`InteractiveViewer`) i a `ShelfReviewScreen`.
+  - Mostra missatges clars de diagnòstic de xarxa i instruccions sobre regles CORS de Firebase Storage quan s'executa en entorn Web (`kIsWeb`).
+  - Suport de `photoUrl` a `ShelfReviewScreen` quan `imageBytes` és buit.
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/book_enrichment_service_test.dart](file:///c:/git/llom/test/book_enrichment_service_test.dart) (11 tests complets cobrint neteja de comes en títols com "Lejos, más lejos", fallback Intent 2 i fallback infoUrl).
+  - Actualitzat [test/shelf_review_screen_test.dart](file:///c:/git/llom/test/shelf_review_screen_test.dart) verificant la renderització amb `photoUrl`.
+  - **114 de 114 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 33: Resolució de l'Error 429 a Google Books, Autenticació amb API Key i Fallback a Open Library
+- [x] Autenticació i control de quota a [lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart):
+  - Resolució de la clau d'entorn `GEMINI_API_KEY` (o configurada localment via `ShelfVisionService.getEffectiveApiKey()`).
+  - Addició automàtica del paràmetre `key` a les consultes de l'API de Google Books quan la clau està disponible (`maxResults: 3`, `printType: 'books'`).
+  - Detecció d'HTTP 429 (`Too Many Requests`): si Google Books retorna codi 429, s'eviten més intents immediats contra el servei i es passa directament al servei de suport (Open Library).
+- [x] Integració de Fallback amb Open Library ([lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart)):
+  - Mètode `fetchFromOpenLibrary(String title, String author)`:
+    * Consulta resilient a `https://openlibrary.org/search.json?title={title}&author={author}&limit=1`.
+    * Extracció de portada en qualitat mitjana (`cover_i` -> `https://covers.openlibrary.org/b/id/{id}-M.jpg`).
+    * Extracció d'any de primera publicació (`first_publish_year`) i nombre de pàgines (`number_of_pages_median`).
+    * Consulta de sinopsi a l'endpoint d'obra d'Open Library (`/works/{key}.json`) o assignació d'`infoUrl` directe (`https://openlibrary.org{doc['key']}`).
+  - Timeout segur de 4 segons a totes les consultes HTTP i 2 segons a la persistència de Firestore per evitar bloquejos.
+- [x] Prevenció de crides repetides a la interfície ([lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart)):
+  - Disparament de la consulta d'enriquiment una sola vegada a `initState` (o en canviar l'ID del llibre a `didUpdateWidget`) mitjançant `_enrichmentFuture` i control de flag `_isLoadingEnrichment`.
+  - Si el llibre ja compta amb dades guardades (`book.synopsis != null` o `book.coverUrl != null`), s'omet la consulta a la xarxa.
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/book_enrichment_service_test.dart](file:///c:/git/llom/test/book_enrichment_service_test.dart) (15 tests, incloent injecció d'API key, gestió de 429, extracció d'Open Library i salt de xarxa).
+  - Actualitzat [test/book_detail_bottom_sheet_test.dart](file:///c:/git/llom/test/book_detail_bottom_sheet_test.dart) (verificant que llibres amb sinopsi/portada ometen consultes i llibres sense dades les disparen).
+  - Actualitzat [test/book_edit_delete_test.dart](file:///c:/git/llom/test/book_edit_delete_test.dart) assegurant aïllament de xarxa.
+  - **120 de 120 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 34: Optimització de l'Enriquiment Prioritzant Open Library i Botó d'Enllaç Dinàmic
+- [x] Ajust de [lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart):
+  - Priorització d'Open Library (`fetchFromOpenLibrary`) com a primera opció ràpida per a portades, sinopsis i metadades.
+  - Si Open Library troba el llibre (portada o sinopsi), assigna el seu `infoUrl` (`https://openlibrary.org/works/...`) i finalitza sense consultar serveis externs bloquejats.
+  - Eliminació del paràmetre `key: apiKey` a les consultes de Google Books API per evitar errors HTTP 401 (la clau de Gemini no disposa d'abast OAuth per a Google Books).
+  - Gestió d'errors HTTP 401 i 429 a Google Books per evitar bucles innecessaris de reintents.
+  - Assegurada la persistència a Cloud Firestore de `coverUrl`, `synopsis`, `publishedYear`, `infoUrl` i `pageCount`.
+- [x] Botó d'enllaç dinàmic a [lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart):
+  - Adaptació dinàmica del botó d'enllaç extern segons l'adreça `infoUrl`:
+    * Si conté `openlibrary.org`: text **"Open Library"** amb icona `Icons.local_library_outlined`.
+    * Si conté `books.google`: text **"Google Books"** amb icona `Icons.menu_book_rounded`.
+    * En qualsevol altre cas: text **"Fitxa del llibre"** amb icona `Icons.open_in_new_rounded`.
+  - Manteniment de la clau `const Key('google_books_button')` per a compatibilitat retroactiva amb la suite de proves.
+  - Obertura resilient de l'URL amb `url_launcher` (`launchUrl(..., mode: LaunchMode.externalApplication)`).
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/book_enrichment_service_test.dart](file:///c:/git/llom/test/book_enrichment_service_test.dart) (16 tests verificant la priorització d'Open Library, l'omissió de Google Books si Open Library té èxit, i l'absència del paràmetre `key` a les consultes).
+  - Actualitzat [test/book_detail_bottom_sheet_test.dart](file:///c:/git/llom/test/book_detail_bottom_sheet_test.dart) (10 tests verificant l'etiqueta i icona dinàmica per a Open Library, Google Books i fitxes genèriques).
+  - **124 de 124 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 35: Integració de GOOGLE_BOOKS_API_KEY (format AIzaSy), Suport Robust d'Open Library i CI/CD
+- [x] Lògica d'enriquiment a [lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart):
+  - Lectura de la variable d'entorn `const String.fromEnvironment('GOOGLE_BOOKS_API_KEY')` o paràmetre al constructor `googleBooksApiKey`.
+  - Validació de seguretat de format: només s'injecta el paràmetre `key` a Google Books si comença per `AIzaSy...` (`hasValidGoogleBooksApiKey == true`), mai amb claus d'AI Studio (`AQ.`) ni buides.
+  - Nou flux de consulta:
+    * **Pas 1**: Consulta primer Google Books API amb la clau. Si respon 200 amb dades vàlides (portada o sinopsi), finalitza i desa a memòria cau (i a Firestore mitjançant `enrichAndPersistBook`).
+    * **Pas 2**: Si Google Books retorna 401, 429, 0 resultats o no disposa de portada/sinopsi, executa automàticament `fetchFromOpenLibrary` com a suport transparent i resilient.
+- [x] Botó d'enllaç dinàmic a [lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart):
+  - Adaptació prioritzada de text i icona segons la URL:
+    * Si conté `books.google`: text **"Google Books"** amb icona `Icons.menu_book_rounded`.
+    * Si conté `openlibrary.org`: text **"Open Library"** amb icona `Icons.local_library_outlined`.
+    * Cas general: text **"Fitxa del llibre"** amb icona `Icons.open_in_new_rounded`.
+- [x] Actualització del Workflow de GitHub Actions ([.github/workflows/deploy.yml](file:///c:/git/llom/.github/workflows/deploy.yml)):
+  - Afegit `--dart-define=GOOGLE_BOOKS_API_KEY=${{ secrets.GOOGLE_BOOKS_API_KEY }}` tant a la comanda `flutter build apk` com a `flutter build web`.
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/book_enrichment_service_test.dart](file:///c:/git/llom/test/book_enrichment_service_test.dart) (18 tests cobrint clau `AIzaSy`, rebuig de clau `AQ.`, priorització de Google Books quan té dades i fallback automàtic a Open Library en 401/429/0).
+  - Verificat [test/book_detail_bottom_sheet_test.dart](file:///c:/git/llom/test/book_detail_bottom_sheet_test.dart) (10 tests amb botons dinàmics i visualitzadors).
+  - **126 de 126 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 36: Refinament de Càrrega de Portada i Sinopsi (Cerca Híbrida i Màxim de 3 Intents)
+- [x] Model de Dades ([lib/models/book_model.dart](file:///c:/git/llom/lib/models/book_model.dart)):
+  - Afegit camp `enrichmentAttempts: int` (per defecte 0) amb serialització a Firestore (`toMap` i `fromMap`) i suport a `copyWith`, `==` i `hashCode`.
+- [x] Cerca Híbrida i Complementària ([lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart)):
+  - A `fetchEnrichmentData`:
+    * Si Google Books retorna tant portada com sinopsi, es dóna per complet i es retorna de seguida.
+    * Si a Google Books li falta algun dels dos camps (o falla amb 401/429/0), es consulta automàticament Open Library i es fusionen les dades (ex: sinopsi de Google Books + portada d'Open Library).
+  - A `enrichAndPersistBook`:
+    * Comprovació estricta de completesa: només s'omet la cerca si el llibre disposa **tant** de sinopsi com de portada (`hasSynopsis && hasCover`).
+    * Límit màxim de 3 intents: si `enrichmentAttempts >= 3`, no es tornen a consultar les APIs i es deixa estar.
+    * Increment automàtic del comptador `enrichmentAttempts` i persistència a Cloud Firestore conjuntament amb les noves metadades recuperades.
+- [x] Interfície d'Usuari ([lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart)):
+  - En obrir el detall, si falta la portada o la sinopsi i s'han fet menys de 3 intents (`enrichmentAttempts < 3`), s'activa el servei d'enriquiment en segon pla per recuperar el camp mancant.
+  - Si el llibre està complet o ja s'han assolit els 3 intents, no es fan peticions innecessàries a la xarxa.
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/models_test.dart](file:///c:/git/llom/test/models_test.dart) verificant la serialització d'`enrichmentAttempts`.
+  - Actualitzat [test/book_enrichment_service_test.dart](file:///c:/git/llom/test/book_enrichment_service_test.dart) (21 tests, incloent cerca híbrida Google Books + Open Library, cerca quan només hi ha un camp i salt quan s'arriba a 3 intents).
+  - Actualitzat [test/book_detail_bottom_sheet_test.dart](file:///c:/git/llom/test/book_detail_bottom_sheet_test.dart) (12 tests verificant el disparament per camp mancant i l'omissió en llibres complets o amb 3 intents).
+  - **131 de 131 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 37: Visualitzador de Fotografia Completa de Balda a BookshelfDetailScreen
+- [x] Detecció de Fotografia de Balda ([lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart)):
+  - Extracció de la URL de la fotografia de la balda (`shelfPhotoUrl`) a partir dels llibres de la balda que tinguin el camp `photoUrl` vàlid i no buit.
+- [x] Botó d'Acció al Capçal de Balda ([lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart)):
+  - Si la balda compta amb una fotografia associada (`shelfPhotoUrl != null`), es mostra un botó circular `IconButton.filledTonal` al costat del botó de la càmera amb clau `Key('shelf_photo_button_$shelfNumber')`, icona `Icons.photo_library_outlined` i tooltip `Veure fotografia de la balda $shelfNumber`.
+- [x] Diàleg Modal del Visor de Fotografia de Balda ([lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart)):
+  - Mètode `_showShelfPhotoViewer` amb disseny coherent de targeta modal:
+    * Capçalera amb títol de balda (`Balda N · Superior/Intermèdia/Inferior/Única`), nom del moble i botó de tancar (`close_shelf_photo_dialog`).
+    * Visor de la imatge completa amb `InteractiveViewer` (zoom i desplaçament suau fins a 4x).
+    * Gestió d'estats de càrrega (`CircularProgressIndicator`) i d'error amb missatges adaptats per a Web (`kIsWeb`) i mòbil.
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/bookshelf_detail_screen_test.dart](file:///c:/git/llom/test/bookshelf_detail_screen_test.dart) (5 tests, incloent comprovació de presència del botó de foto només si hi ha `photoUrl`, obertura del diàleg amb `InteractiveViewer` i tancament correcte).
+  - **132 de 132 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 38: Suport CORS Transparent per a Portades de Google Books a Flutter Web
+- [x] Resolució de Restriccions CORS a Web ([lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart)):
+  - Creat el mètode `BookEnrichmentService.getSafeDisplayCoverUrl(String? url, {bool? isWebOverride})`:
+    * A Flutter Web (`kIsWeb`), els servidors d'imatges de Google Books (`books.google.com` o `googleusercontent.com`) no inclouen capçaleres CORS (`Access-Control-Allow-Origin: *`), fet que provoca que el navegador bloquegi la petició amb `statusCode: 0` en renderitzar a CanvasKit.
+    * Per solucionar-ho transparentment a la Web, l'URL es canalitza a través del proxy CDN d'imatges d'alt rendiment `images.weserv.nl` amb Cloudflare, que afegeix capçaleres CORS completes i memòria cau.
+    * A Android, iOS i escriptori (`!kIsWeb`), es manté la URL directa original sense passar per cap proxy.
+    * Les imatges d'Open Library (`covers.openlibrary.org`) i de Firebase Storage no es modifiquen, ja que suporten CORS de forma nativa.
+- [x] Renderització de la Portada ([lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart)):
+  - A `_buildCoverThumbnail`, s'utilitza `BookEnrichmentService.getSafeDisplayCoverUrl(_currentBook.coverUrl)` per carregar la portada de manera segura i immediata, tant per a nous llibres com per a llibres ja existents a Cloud Firestore.
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/book_enrichment_service_test.dart](file:///c:/git/llom/test/book_enrichment_service_test.dart) amb proves unitàries exhaustives per a `getSafeDisplayCoverUrl` (simulació Web amb proxy, simulació mòbil directa, prevenció de doble proxy i comprovació d'Open Library).
+  - **133 de 133 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
 ---
 
 ## 🚀 Propers Passos
 *(S'aniran afegint a mesura que es defineixin noves tasques)*
+
+
+
+
+

@@ -1,6 +1,9 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
+import 'package:flutter/foundation.dart';
 import '../models/book_model.dart';
 import '../models/bookcase_model.dart';
+import '../models/detected_book_spine.dart';
 
 /// Servei per gestionar les estanteries / mobles i llibres sota Cloud Firestore
 class BookcaseService {
@@ -155,6 +158,27 @@ class BookcaseService {
     });
   }
 
+  /// Retorna un Stream de tots els llibres de la biblioteca sencera (útil per a cercadors)
+  Stream<List<BookModel>> getAllBooks(String libraryId) {
+    final cleanLibId = libraryId.trim();
+    if (cleanLibId.isEmpty) {
+      return Stream.value([]);
+    }
+
+    final booksColl = _booksRef(cleanLibId);
+    if (booksColl == null) {
+      return Stream.value([]);
+    }
+
+    return booksColl.snapshots().map((snapshot) {
+      final list = snapshot.docs
+          .map((doc) => BookModel.fromMap(doc.data(), doc.id))
+          .toList();
+      list.sort((a, b) => a.positionIndex.compareTo(b.positionIndex));
+      return list;
+    });
+  }
+
   /// Afegeix un nou llibre a la col·lecció de llibres de la biblioteca i incrementa el comptador del moble
   Future<BookModel> addBook(String libraryId, BookModel book) async {
     final cleanLibId = libraryId.trim();
@@ -268,5 +292,79 @@ class BookcaseService {
 
     await batch.commit();
     return book;
+  }
+
+  /// Puja la foto de la balda a Firebase Storage i desa en batch tots els llibres detectats a Firestore
+  Future<List<BookModel>> saveCatalogedShelf({
+    required String libraryId,
+    required BookcaseModel bookcase,
+    required int shelfIndex,
+    required Uint8List imageBytes,
+    required List<DetectedBookSpine> detectedBooks,
+    FirebaseStorage? storageInstance,
+  }) async {
+    final cleanLibId = libraryId.trim();
+    if (cleanLibId.isEmpty) {
+      throw ArgumentError('libraryId no pot estar buit');
+    }
+
+    final booksColl = _booksRef(cleanLibId);
+    if (booksColl == null || _firestore == null) {
+      throw StateError('FirebaseFirestore no està disponible');
+    }
+
+    String? photoUrl;
+    try {
+      final storage = storageInstance ?? FirebaseStorage.instance;
+      final storageRef = storage
+          .ref()
+          .child('libraries/$cleanLibId/shelves/${bookcase.id}_shelf_$shelfIndex.jpg');
+
+      final uploadTask = storageRef.putData(
+        imageBytes,
+        SettableMetadata(contentType: 'image/jpeg'),
+      );
+      final snapshot = await uploadTask;
+      final downloadUrl = await snapshot.ref.getDownloadURL();
+      photoUrl = downloadUrl;
+    } catch (e) {
+      debugPrint('No s\'ha pogut pujar la imatge a Storage (continuant amb desat de llibres): $e');
+    }
+
+    final batch = _firestore!.batch();
+    final now = DateTime.now();
+    final List<BookModel> savedBooks = [];
+
+    for (int i = 0; i < detectedBooks.length; i++) {
+      final spine = detectedBooks[i];
+      final docRef = booksColl.doc();
+      final book = BookModel(
+        id: docRef.id,
+        title: spine.title,
+        author: spine.author ?? '',
+        shelfCode: '${bookcase.id}-B$shelfIndex',
+        bookcaseId: bookcase.id,
+        positionIndex: i + 1,
+        photoUrl: photoUrl,
+        box: spine.box,
+        createdAt: now,
+      );
+      batch.set(docRef, book.toMap());
+      savedBooks.add(book);
+    }
+
+    if (savedBooks.isNotEmpty) {
+      final bookcaseDoc = _bookcasesRef(cleanLibId)?.doc(bookcase.id);
+      if (bookcaseDoc != null) {
+        batch.set(
+          bookcaseDoc,
+          {'bookCount': FieldValue.increment(savedBooks.length)},
+          SetOptions(merge: true),
+        );
+      }
+    }
+
+    await batch.commit();
+    return savedBooks;
   }
 }

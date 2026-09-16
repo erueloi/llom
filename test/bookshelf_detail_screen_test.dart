@@ -160,5 +160,118 @@ void main() {
       expect(find.text('Afegir llibre'), findsOneWidget);
       expect(find.text('Títol del llibre *'), findsOneWidget);
     });
+
+    testWidgets('FAB Fotografiar balda opens shelf selection and capture source sheet', (tester) async {
+      final mockService = MockBookcaseServiceForDetail(
+        bookcases: [testBookcase],
+        books: testBooks,
+      );
+
+      await tester.pumpWidget(createWidget(service: mockService));
+      await tester.pumpAndSettle();
+
+      final fab = find.byKey(const Key('bookshelf_actions_fab'));
+      await tester.tap(fab);
+      await tester.pumpAndSettle();
+
+      // Tap Fotografiar balda
+      await tester.tap(find.byKey(const Key('action_camera_shelf')));
+      await tester.pumpAndSettle();
+
+      // Since shelfCount is 3, shelf selection sheet should appear
+      expect(find.text('Quina balda vols fotografiar?'), findsOneWidget);
+      expect(find.byKey(const Key('select_shelf_camera_1')), findsOneWidget);
+      expect(find.byKey(const Key('select_shelf_camera_2')), findsOneWidget);
+      expect(find.byKey(const Key('select_shelf_camera_3')), findsOneWidget);
+
+      // Select Balda 2
+      await tester.tap(find.byKey(const Key('select_shelf_camera_2')));
+      await tester.pumpAndSettle();
+
+      // Capture source sheet should appear
+      expect(find.text('Fotografiar Balda 2'), findsOneWidget);
+      expect(find.text('Fer foto amb la càmera'), findsOneWidget);
+      expect(find.text('Triar de la galeria'), findsOneWidget);
+    });
+
+    testWidgets('Shelf header camera button directly opens capture source sheet for that shelf', (tester) async {
+      final mockService = MockBookcaseServiceForDetail(
+        bookcases: [testBookcase],
+        books: testBooks,
+      );
+
+      await tester.pumpWidget(createWidget(service: mockService));
+      await tester.pumpAndSettle();
+
+      // Tap camera button on Balda 1
+      final shelfCamBtn = find.byKey(const Key('shelf_camera_button_1'));
+      expect(shelfCamBtn, findsOneWidget);
+
+      await tester.tap(shelfCamBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Fotografiar Balda 1'), findsOneWidget);
+      expect(find.byKey(const Key('capture_option_camera')), findsOneWidget);
+      expect(find.byKey(const Key('capture_option_gallery')), findsOneWidget);
+    });
+
+    testWidgets('Shelf photo button is displayed when shelf has photoUrl and opens viewer dialog', (tester) async {
+      final booksWithPhoto = [
+        BookModel(
+          id: 'b1_photo',
+          title: 'Pedra de tartera',
+          author: 'Maria Barbal',
+          shelfCode: 'bc_detail_1-B1',
+          bookcaseId: 'bc_detail_1',
+          positionIndex: 1,
+          photoUrl: 'https://example.com/balda1_full.jpg',
+          createdAt: now,
+        ),
+        BookModel(
+          id: 'b2_no_photo',
+          title: 'La plaça del Diamant',
+          author: 'Mercè Rodoreda',
+          shelfCode: 'bc_detail_1-B2',
+          bookcaseId: 'bc_detail_1',
+          positionIndex: 1,
+          createdAt: now,
+        ),
+      ];
+
+      final mockService = MockBookcaseServiceForDetail(
+        bookcases: [testBookcase],
+        books: booksWithPhoto,
+      );
+
+      await tester.pumpWidget(createWidget(service: mockService));
+      await tester.pumpAndSettle();
+
+      // Balda 1 té llibre amb photoUrl -> ha de mostrar el botó de veure fotografia
+      final photoBtn1 = find.byKey(const Key('shelf_photo_button_1'));
+      expect(photoBtn1, findsOneWidget);
+
+      // Balda 2 NO té cap llibre amb photoUrl -> no ha de mostrar el botó
+      final photoBtn2 = find.byKey(const Key('shelf_photo_button_2'));
+      expect(photoBtn2, findsNothing);
+
+      // Prémer el botó de veure fotografia de la Balda 1
+      await tester.tap(photoBtn1);
+      await tester.pump(); // Inicia obertura de diàleg
+
+      // Comprovar elements del diàleg de visor de fotografia de balda
+      expect(find.text('Balda 1 · Superior'), findsWidgets);
+      expect(find.text('Llibreria de Roure'), findsWidgets);
+      expect(find.byType(InteractiveViewer), findsOneWidget);
+
+      final closeBtn = find.byKey(const Key('close_shelf_photo_dialog'));
+      expect(closeBtn, findsOneWidget);
+
+      // Tancar el diàleg
+      await tester.tap(closeBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('close_shelf_photo_dialog')), findsNothing);
+    });
   });
 }
+

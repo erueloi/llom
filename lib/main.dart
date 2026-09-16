@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
@@ -13,6 +14,18 @@ void main() async {
     options: DefaultFirebaseOptions.currentPlatform,
   );
   runApp(const LlomApp());
+}
+
+/// Comportament de desplaçament personalitzat per permetre arrossegar amb ratolí, trackpad i tàctil
+class AppScrollBehavior extends MaterialScrollBehavior {
+  const AppScrollBehavior();
+
+  @override
+  Set<PointerDeviceKind> get dragDevices => {
+    PointerDeviceKind.touch,
+    PointerDeviceKind.mouse,
+    PointerDeviceKind.trackpad,
+  };
 }
 
 class LlomApp extends StatelessWidget {
@@ -37,6 +50,7 @@ class LlomApp extends StatelessWidget {
             title: 'Llom',
             debugShowCheckedModeBanner: false,
             theme: AppTheme.lightTheme,
+            scrollBehavior: const AppScrollBehavior(),
             builder: (context, child) {
               return MediaQuery(
                 data: MediaQuery.of(context).copyWith(

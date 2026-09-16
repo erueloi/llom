@@ -17,12 +17,19 @@ import '../models/user_model.dart';
 import 'profile_screen.dart';
 import 'bookshelf_detail_screen.dart';
 import 'shelf_detail_screen.dart';
+import '../services/shelf_vision_service.dart';
 
 class HomeScreen extends StatefulWidget {
   final BookcaseService? bookcaseService;
   final UpdateService? updateService;
+  final bool promptApiKeyIfMissing;
 
-  const HomeScreen({super.key, this.bookcaseService, this.updateService});
+  const HomeScreen({
+    super.key,
+    this.bookcaseService,
+    this.updateService,
+    this.promptApiKeyIfMissing = false,
+  });
 
   @override
   State<HomeScreen> createState() => _HomeScreenState();
@@ -51,8 +58,25 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     });
 
-    if (!kIsWeb) {
-      WidgetsBinding.instance.addPostFrameCallback((_) => _checkForSilentUpdate());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!kIsWeb) {
+        _checkForSilentUpdate();
+      }
+      if (widget.promptApiKeyIfMissing) {
+        _checkGeminiApiKey();
+      }
+    });
+  }
+
+  Future<void> _checkGeminiApiKey() async {
+    try {
+      final key = await ShelfVisionService.getEffectiveApiKey();
+      if (!mounted) return;
+      if (key == null || key.trim().isEmpty) {
+        await ShelfVisionService.promptApiKeyIfNeeded(context);
+      }
+    } catch (_) {
+      // Comprovació silenciosa
     }
   }
 
@@ -137,6 +161,8 @@ class _HomeScreenState extends State<HomeScreen> {
   void _navigateToBookshelfDetail({
     required BookcaseModel bookcase,
     required String libraryId,
+    String? highlightBookId,
+    String? initialSearchQuery,
   }) {
     Navigator.of(context).push(
       MaterialPageRoute(
@@ -144,12 +170,74 @@ class _HomeScreenState extends State<HomeScreen> {
           bookcase: bookcase,
           libraryId: libraryId,
           bookcaseService: _bookcaseService,
+          highlightBookId: highlightBookId,
+          initialSearchQuery: initialSearchQuery,
         ),
       ),
     );
   }
 
-  /// Navegació intel·ligent directa quan es confirma la cerca amb el teclat (Intro)
+  Map<BookcaseModel, List<BookModel>> _getMatchingRealBooks(
+    List<BookModel> allBooks,
+    List<BookcaseModel> bookcases,
+  ) {
+    if (_searchQuery.isEmpty) return {};
+
+    final Map<BookcaseModel, List<BookModel>> grouped = {};
+
+    final matches = allBooks.where((book) {
+      final titleMatch = book.title.toLowerCase().contains(_searchQuery);
+      final authorMatch = book.author.toLowerCase().contains(_searchQuery);
+      return titleMatch || authorMatch;
+    }).toList();
+
+    for (final book in matches) {
+      final bookcase = bookcases.firstWhere(
+        (b) => b.id == book.bookcaseId,
+        orElse: () => BookcaseModel(
+          id: book.bookcaseId ?? '',
+          name: 'Estanteria',
+          room: '',
+          shelfCount: 1,
+          bookCount: 1,
+          order: 0,
+          createdAt: DateTime.now(),
+        ),
+      );
+      grouped.putIfAbsent(bookcase, () => []).add(book);
+    }
+
+    return grouped;
+  }
+
+  void _handleRealSearchSubmit(
+    String libraryId,
+    List<BookcaseModel> bookcases,
+    List<BookModel> allBooks,
+  ) {
+    final grouped = _getMatchingRealBooks(allBooks, bookcases);
+    final total = grouped.values.fold<int>(0, (sum, list) => sum + list.length);
+
+    if (total == 1) {
+      final entry = grouped.entries.first;
+      final bookcase = entry.key;
+      final book = entry.value.first;
+      _navigateToBookshelfDetail(
+        bookcase: bookcase,
+        libraryId: libraryId,
+        highlightBookId: book.id,
+      );
+    } else if (grouped.length == 1 && total > 1) {
+      final bookcase = grouped.keys.first;
+      _navigateToBookshelfDetail(
+        bookcase: bookcase,
+        libraryId: libraryId,
+        initialSearchQuery: _searchQuery,
+      );
+    }
+  }
+
+  /// Navegació intel·ligent directa quan es confirma la cerca amb el teclat (Intro) en mode mock
   void _handleSearchSubmit() {
     final total = _totalMatchesCount;
     final grouped = _matchingBooksByBookcase;
@@ -338,6 +426,79 @@ class _HomeScreenState extends State<HomeScreen> {
       ),
       body: LayoutBuilder(
         builder: (context, constraints) {
+          if (activeLibrary != null && activeLibrary.id.isNotEmpty) {
+            return StreamBuilder<List<BookcaseModel>>(
+              stream: _bookcaseService.getBookcases(activeLibrary.id),
+              builder: (context, bcSnapshot) {
+                final bookcases = bcSnapshot.data ?? [];
+                return StreamBuilder<List<BookModel>>(
+                  stream: _bookcaseService.getAllBooks(activeLibrary.id),
+                  builder: (context, booksSnapshot) {
+                    final allBooks = booksSnapshot.data ?? [];
+                    final realMatches = _getMatchingRealBooks(allBooks, bookcases);
+                    final totalRealMatches = realMatches.values.fold<int>(0, (sum, l) => sum + l.length);
+
+                    return Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 1000),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const SizedBox(height: 8),
+                              _buildProminentSearchBar(
+                                onSubmitted: () => _handleRealSearchSubmit(activeLibrary.id, bookcases, allBooks),
+                              ),
+                              const SizedBox(height: 16),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+                                child: Text(
+                                  isSearching
+                                      ? 'Resultats de la cerca ($totalRealMatches llibres trobats):'
+                                      : 'Les teves estanteries:',
+                                  style: const TextStyle(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.textMain,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Expanded(
+                                child: isSearching
+                                    ? _buildGroupedRealSearchResults(
+                                        grouped: realMatches,
+                                        libraryId: activeLibrary.id,
+                                        isLibraryEmpty: allBooks.isEmpty,
+                                      )
+                                    : (bcSnapshot.connectionState == ConnectionState.waiting
+                                        ? const Center(
+                                            child: SizedBox(
+                                              width: 38,
+                                              height: 38,
+                                              child: CircularProgressIndicator(
+                                                strokeWidth: 3,
+                                                valueColor: AlwaysStoppedAnimation(AppColors.primary),
+                                              ),
+                                            ),
+                                          )
+                                        : (bookcases.isEmpty
+                                            ? _buildEmptyState(activeLibrary.id, canEdit)
+                                            : _buildRealBookcaseCarousel(bookcases, activeLibrary.id, canEdit))),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                );
+              },
+            );
+          }
+
+          // Fallback per a mode mock / sense biblioteca activa (ex. tests unitaris)
           return Center(
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 1000),
@@ -347,13 +508,8 @@ class _HomeScreenState extends State<HomeScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     const SizedBox(height: 8),
-
-                    // Barra de cerca gran i accessible per a gent gran
                     _buildProminentSearchBar(),
-
                     const SizedBox(height: 16),
-
-                    // Títol de secció d'alta llegibilitat
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
                       child: Text(
@@ -367,14 +523,11 @@ class _HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ),
-
                     const SizedBox(height: 6),
-
-                    // Contingut: Carrusel Cover Flow o Resultats agrupats per moble
                     Expanded(
                       child: isSearching
                           ? _buildGroupedSearchResults(groupedMatches)
-                          : _buildBookcaseContent(activeLibrary?.id ?? '', canEdit),
+                          : _buildBookcaseContent('', canEdit),
                     ),
                   ],
                 ),
@@ -416,7 +569,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildProminentSearchBar() {
+  Widget _buildProminentSearchBar({VoidCallback? onSubmitted}) {
     return Container(
       constraints: const BoxConstraints(minHeight: 60),
       decoration: BoxDecoration(
@@ -437,7 +590,13 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Center(
         child: TextField(
           controller: _searchController,
-          onSubmitted: (_) => _handleSearchSubmit(),
+          onSubmitted: (_) {
+            if (onSubmitted != null) {
+              onSubmitted();
+            } else {
+              _handleSearchSubmit();
+            }
+          },
           style: const TextStyle(
             color: AppColors.textMain,
             fontSize: 17,
@@ -483,6 +642,40 @@ class _HomeScreenState extends State<HomeScreen> {
             filled: false,
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _buildRealBookcaseCarousel(List<BookcaseModel> bookcases, String libraryId, bool canEdit) {
+    final units = bookcases.map((b) => b.toShelfUnit()).toList();
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 85, top: 6),
+      child: BookcaseCarousel(
+        units: units,
+        canEdit: canEdit,
+        onUnitSelected: (unit) {
+          final bookcase = bookcases.firstWhere(
+            (b) => b.id == unit.id,
+            orElse: () => BookcaseModel(
+              id: unit.id,
+              name: unit.name,
+              room: unit.location,
+              shelfCount: unit.shelfCount,
+              bookCount: unit.bookCount,
+              createdAt: DateTime.now(),
+            ),
+          );
+          _navigateToBookshelfDetail(bookcase: bookcase, libraryId: libraryId);
+        },
+        onEditUnit: (unit) {
+          final bookcase = bookcases.firstWhere((b) => b.id == unit.id);
+          showEditBookcaseNameDialog(context, libraryId, bookcase, bookcaseService: _bookcaseService);
+        },
+        onDeleteUnit: (unit) {
+          final bookcase = bookcases.firstWhere((b) => b.id == unit.id);
+          showDeleteBookcaseDialog(context, libraryId, bookcase, bookcaseService: _bookcaseService);
+        },
       ),
     );
   }
@@ -661,6 +854,223 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildGroupedRealSearchResults({
+    required Map<BookcaseModel, List<BookModel>> grouped,
+    required String libraryId,
+    required bool isLibraryEmpty,
+  }) {
+    if (grouped.isEmpty) {
+      return Center(
+        child: SingleChildScrollView(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                Icons.search_off_rounded,
+                size: 68,
+                color: AppColors.textMuted.withAlpha(130),
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'No s\'ha trobat cap llibre',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textMain,
+                ),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                isLibraryEmpty
+                    ? 'Encara no hi ha cap llibre catalogat en aquesta biblioteca.'
+                    : 'Comprova que el títol o autor estiguin ben escrits.',
+                style: TextStyle(
+                  fontSize: 16,
+                  color: AppColors.textMuted.withAlpha(220),
+                ),
+                textAlign: TextAlign.center,
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final total = grouped.values.fold<int>(0, (sum, list) => sum + list.length);
+    final isSingleBookcaseWithMultipleBooks = grouped.length == 1 && total > 1;
+    final singleBookcase = isSingleBookcaseWithMultipleBooks ? grouped.keys.first : null;
+
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 90, top: 4),
+      children: [
+        if (isSingleBookcaseWithMultipleBooks && singleBookcase != null)
+          Padding(
+            padding: const EdgeInsets.only(bottom: 12),
+            child: Material(
+              color: AppColors.primary,
+              borderRadius: BorderRadius.circular(16),
+              elevation: 2,
+              child: InkWell(
+                onTap: () {
+                  _navigateToBookshelfDetail(
+                    bookcase: singleBookcase,
+                    libraryId: libraryId,
+                    initialSearchQuery: _searchQuery,
+                  );
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 14),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withAlpha(50),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.auto_stories_rounded,
+                          color: Colors.white,
+                          size: 24,
+                        ),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Veure tots els llibres destacats a ${singleBookcase.name} →',
+                              style: const TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              'Obre l\'estanteria amb els $total llibres ressaltats alhora',
+                              style: TextStyle(
+                                fontSize: 13.5,
+                                color: Colors.white.withAlpha(220),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+        ...grouped.entries.map((entry) {
+          final bookcase = entry.key;
+          final booksInBookcase = entry.value;
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                margin: const EdgeInsets.fromLTRB(4, 12, 4, 10),
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withAlpha(45),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(
+                    color: AppColors.accent.withAlpha(90),
+                    width: 1.2,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 48,
+                      height: 48,
+                      decoration: BoxDecoration(
+                        color: AppColors.surface,
+                        shape: BoxShape.circle,
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppColors.primary.withAlpha(25),
+                            blurRadius: 6,
+                            offset: const Offset(0, 2),
+                          ),
+                        ],
+                      ),
+                      child: const Center(
+                        child: Icon(
+                          Icons.shelves,
+                          color: AppColors.primary,
+                          size: 26,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Trobat a ${bookcase.name}',
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w800,
+                              color: AppColors.textMain,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            '${booksInBookcase.length} ${booksInBookcase.length == 1 ? 'llibre coincident' : 'llibres coincidents'}${bookcase.room.isNotEmpty ? ' · ${bookcase.room}' : ''}',
+                            style: const TextStyle(
+                              fontSize: 13.5,
+                              fontWeight: FontWeight.w600,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.arrow_forward_ios_rounded,
+                        size: 18,
+                        color: AppColors.primary,
+                      ),
+                      tooltip: 'Obrir estanteria sencera',
+                      onPressed: () {
+                        _navigateToBookshelfDetail(
+                          bookcase: bookcase,
+                          libraryId: libraryId,
+                          initialSearchQuery: _searchQuery,
+                        );
+                      },
+                    ),
+                  ],
+                ),
+              ),
+
+              ...booksInBookcase.map((book) {
+                return BookCard(
+                  book: book,
+                  onTap: () {
+                    _navigateToBookshelfDetail(
+                      bookcase: bookcase,
+                      libraryId: libraryId,
+                      highlightBookId: book.id,
+                    );
+                  },
+                );
+              }),
+            ],
+          );
+        }),
+      ],
     );
   }
 

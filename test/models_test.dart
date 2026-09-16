@@ -60,6 +60,13 @@ void main() {
         positionIndex: 3,
         photoUrl: 'https://example.com/book.jpg',
         notes: 'Primera edició',
+        box: [100, 200, 800, 300],
+        synopsis: 'La història de la Natàlia, Colometa.',
+        coverUrl: 'https://example.com/cover.jpg',
+        pageCount: 256,
+        publishedYear: '1962',
+        infoUrl: 'https://books.google.com/test',
+        enrichmentAttempts: 2,
         createdAt: now,
       );
 
@@ -70,6 +77,13 @@ void main() {
       expect(map['positionIndex'], 3);
       expect(map['photoUrl'], 'https://example.com/book.jpg');
       expect(map['notes'], 'Primera edició');
+      expect(map['box'], [100, 200, 800, 300]);
+      expect(map['synopsis'], 'La història de la Natàlia, Colometa.');
+      expect(map['coverUrl'], 'https://example.com/cover.jpg');
+      expect(map['pageCount'], 256);
+      expect(map['publishedYear'], '1962');
+      expect(map['infoUrl'], 'https://books.google.com/test');
+      expect(map['enrichmentAttempts'], 2);
       expect(map['createdAt'], isA<Timestamp>());
 
       final parsed = BookModel.fromMap(map, 'b1');
@@ -80,6 +94,13 @@ void main() {
       expect(parsed.positionIndex, book.positionIndex);
       expect(parsed.photoUrl, book.photoUrl);
       expect(parsed.notes, book.notes);
+      expect(parsed.box, [100, 200, 800, 300]);
+      expect(parsed.synopsis, book.synopsis);
+      expect(parsed.coverUrl, book.coverUrl);
+      expect(parsed.pageCount, 256);
+      expect(parsed.publishedYear, '1962');
+      expect(parsed.infoUrl, book.infoUrl);
+      expect(parsed.enrichmentAttempts, 2);
     });
 
     test('copyWith works properly', () {
@@ -95,12 +116,16 @@ void main() {
       final updated = book.copyWith(
         title: 'Nou Títol',
         positionIndex: 2,
+        synopsis: 'Nova sinopsi',
+        coverUrl: 'https://example.com/new.jpg',
       );
 
       expect(updated.id, 'b1');
       expect(updated.title, 'Nou Títol');
       expect(updated.author, 'Autor');
       expect(updated.positionIndex, 2);
+      expect(updated.synopsis, 'Nova sinopsi');
+      expect(updated.coverUrl, 'https://example.com/new.jpg');
     });
   });
 

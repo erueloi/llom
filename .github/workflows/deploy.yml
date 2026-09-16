@@ -73,10 +73,10 @@ jobs:
         run: flutter pub get
 
       - name: Build APK (Release per a tauleta/mòbil)
-        run: flutter build apk --release --no-tree-shake-icons
+        run: flutter build apk --release --no-tree-shake-icons --dart-define=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} --dart-define=GOOGLE_BOOKS_API_KEY=${{ secrets.GOOGLE_BOOKS_API_KEY }}
 
       - name: Build Web (Release)
-        run: flutter build web --release --no-tree-shake-icons
+        run: flutter build web --release --dart-define=GEMINI_API_KEY=${{ secrets.GEMINI_API_KEY }} --dart-define=GOOGLE_BOOKS_API_KEY=${{ secrets.GOOGLE_BOOKS_API_KEY }}
 
       - name: Prepare Hosting Artifacts
         run: |

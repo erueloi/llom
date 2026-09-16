@@ -78,10 +78,13 @@ void main() {
     await tester.pump(const Duration(milliseconds: 100));
 
     // Verify version row is present
-    expect(find.text('Versió de l\'aplicació'), findsOneWidget);
+    final versionTile = find.text('Versió de l\'aplicació');
+    expect(versionTile, findsOneWidget);
 
-    // Tap on version tile
-    await tester.tap(find.text('Versió de l\'aplicació'));
+    // Scroll into view and tap on version tile
+    await tester.ensureVisible(versionTile);
+    await tester.pumpAndSettle();
+    await tester.tap(versionTile);
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 300));
     await tester.pump(const Duration(milliseconds: 300));

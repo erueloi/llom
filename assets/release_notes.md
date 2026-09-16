@@ -1,5 +1,13 @@
 # Release Notes
 
+## v1.1.0+4
+- Desplaçament horitzontal fluid amb ratolí, trackpad i pantalla tàctil a les baldes (Web i Desktop).
+- Nou visor de fotografia completa de la balda amb zoom interactiu de fins a 4x (InteractiveViewer).
+- Enriquiment intel·ligent de llibres amb cerca híbrida: combinació de Google Books API i Open Library per a sinopsi, portada, pàgines i any.
+- Resolució del bloqueig de CORS a Flutter Web per a portades de Google Books mitjançant canalització segura.
+- Botó d'enllaç extern dinàmic a la fitxa del llibre (Google Books / Open Library).
+- Cerca resilient de llibres tolerant a signes de puntuació i límit de 3 intents per optimitzar xarxa i quotes.
+- Suite de tests ampliada a 133 tests (100% èxit) i zero advertències d'anàlisi.
 ## v1.0.2+3
 - Nova pantalla de detall de mobles d'estanteria (BookshelfDetailScreen) en temps real.
 - Edició i eliminació completa de llibres amb confirmació de seguretat i ajust atòmic de comptadors.
@@ -21,6 +29,7 @@ Primera release de Llom amb identificació de baldes, disseny accessible i despl
 - Autenticació accessible amb Google Sign-In i correu/contrasenya.
 - Gestió multi-biblioteca amb rols (Propietari, Editor, Lector) i codis d'invitació.
 - Disseny adaptat a accessibilitat sènior amb mode de text extra gran.
+
 
 
 

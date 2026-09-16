@@ -11,6 +11,7 @@ import 'package:llom/screens/home_screen.dart';
 import 'package:llom/screens/profile_screen.dart';
 import 'package:llom/services/auth_service.dart';
 import 'package:llom/services/bookcase_service.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 class MockAuthServiceForProfile extends AuthService {
   bool signOutCalled = false;
@@ -284,6 +285,53 @@ void main() {
       expect(find.text('42 llibres'), findsOneWidget);
 
       mockBookcaseService.dispose();
+    });
+
+    testWidgets('ProfileScreen renders Gemini key tile and allows configuring key', (tester) async {
+      SharedPreferences.setMockInitialValues({});
+
+      final libraryProvider = MockLibraryProviderForProfile(
+        user: testUser,
+        activeLib: testLibrary,
+      );
+      final settingsProvider = SettingsProvider();
+
+      await tester.pumpWidget(
+        MultiProvider(
+          providers: [
+            ChangeNotifierProvider<LibraryProvider>.value(value: libraryProvider),
+            ChangeNotifierProvider<SettingsProvider>.value(value: settingsProvider),
+          ],
+          child: const MaterialApp(
+            home: ProfileScreen(),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      final geminiTile = find.byKey(const Key('profile_gemini_key_tile'));
+      expect(geminiTile, findsOneWidget);
+      expect(find.text('Clau de Gemini (IA)'), findsOneWidget);
+
+      // Tap on the tile to open the bottom sheet
+      await tester.ensureVisible(geminiTile);
+      await tester.pumpAndSettle();
+      await tester.tap(geminiTile);
+      await tester.pumpAndSettle();
+
+      // Verify the bottom sheet opened
+      expect(find.byKey(const Key('gemini_api_key_input')), findsOneWidget);
+      expect(find.byKey(const Key('gemini_api_key_save_btn')), findsOneWidget);
+
+      // Enter key and save
+      await tester.enterText(find.byKey(const Key('gemini_api_key_input')), 'AIzaSy_TEST_KEY_123');
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.byKey(const Key('gemini_api_key_save_btn')));
+      await tester.pumpAndSettle();
+
+      // Bottom sheet closed and tile updated
+      expect(find.text('Configurada al dispositiu'), findsOneWidget);
     });
   });
 }

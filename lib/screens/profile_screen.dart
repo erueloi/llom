@@ -8,16 +8,22 @@ import '../providers/library_provider.dart';
 import '../providers/settings_provider.dart';
 import '../services/auth_service.dart';
 import '../services/update_service.dart';
+import '../services/shelf_vision_service.dart';
 import '../widgets/library_dialogs.dart';
 import '../widgets/release_notes_dialog.dart';
 
 /// Pantalla de Perfil d'Usuari amb preferències d'accessibilitat i gestió de sessió
-class ProfileScreen extends StatelessWidget {
+class ProfileScreen extends StatefulWidget {
   final AuthService? authService;
   final UpdateService? updateService;
 
   const ProfileScreen({super.key, this.authService, this.updateService});
 
+  @override
+  State<ProfileScreen> createState() => _ProfileScreenState();
+}
+
+class _ProfileScreenState extends State<ProfileScreen> {
   String _getInitialLetter(UserModel? user, User? fbUser) {
     final name = user?.displayName ?? fbUser?.displayName ?? '';
     if (name.trim().isNotEmpty) {
@@ -107,7 +113,7 @@ class ProfileScreen extends StatelessWidget {
       final libraryProvider = context.read<LibraryProvider?>();
       libraryProvider?.clear();
 
-      final service = authService ?? AuthService();
+      final service = widget.authService ?? AuthService();
       await service.signOut();
 
       if (context.mounted) {
@@ -194,7 +200,7 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final effectiveUpdateService = updateService ?? UpdateService();
+    final effectiveUpdateService = widget.updateService ?? UpdateService();
     final libraryProvider = context.watch<LibraryProvider?>();
     final settingsProvider = context.watch<SettingsProvider?>();
 
@@ -386,6 +392,72 @@ class ProfileScreen extends StatelessWidget {
                         onChanged: (value) {
                           settingsProvider?.setExtraLargeText(value);
                         },
+                      ),
+                      const Divider(height: 1, color: AppColors.canvas),
+                      InkWell(
+                        key: const Key('profile_gemini_key_tile'),
+                        onTap: () async {
+                          await ShelfVisionService.promptApiKeyIfNeeded(context, forceShow: true);
+                          if (mounted) {
+                            setState(() {});
+                          }
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+                          child: Row(
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: AppColors.accent.withAlpha(40),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: const Icon(
+                                  Icons.auto_awesome_rounded,
+                                  color: AppColors.primary,
+                                  size: 26,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    const Text(
+                                      'Clau de Gemini (IA)',
+                                      style: TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.w600,
+                                        color: AppColors.textMain,
+                                      ),
+                                    ),
+                                    FutureBuilder<String?>(
+                                      future: ShelfVisionService.getEffectiveApiKey(),
+                                      builder: (context, snapshot) {
+                                        final hasKey = snapshot.data != null && snapshot.data!.isNotEmpty;
+                                        return Text(
+                                          hasKey
+                                              ? 'Configurada al dispositiu'
+                                              : 'Sense configurar · Toca per afegir-la',
+                                          style: TextStyle(
+                                            fontSize: 13,
+                                            color: hasKey ? Colors.green[800] : AppColors.textMuted,
+                                            fontWeight: hasKey ? FontWeight.w600 : FontWeight.normal,
+                                          ),
+                                        );
+                                      },
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const Icon(
+                                Icons.chevron_right_rounded,
+                                color: AppColors.primary,
+                                size: 24,
+                              ),
+                            ],
+                          ),
+                        ),
                       ),
                       const Divider(height: 1, color: AppColors.canvas),
                       InkWell(

@@ -1,0 +1,16 @@
+rules_version = '2';
+
+service firebase.storage {
+  match /b/{bucket}/o {
+    // Permet lectura i escriptura a usuaris autenticats sota libraries/{libraryId}/...
+    match /libraries/{libraryId}/{allPaths=**} {
+      allow read, write: if request.auth != null;
+    }
+
+    // Permet lectura pública de la resta d'arxius (ex. fitxers estàtics, APK d'actualització)
+    match /{allPaths=**} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+  }
+}
