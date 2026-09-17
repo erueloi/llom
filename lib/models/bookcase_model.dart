@@ -9,6 +9,7 @@ class BookcaseModel {
   final String room;
   final int shelfCount;
   final int bookCount;
+  final int widthCm;
   final int order;
   final DateTime createdAt;
 
@@ -18,9 +19,26 @@ class BookcaseModel {
     required this.room,
     required this.shelfCount,
     this.bookCount = 0,
+    this.widthCm = 80,
     this.order = 0,
     required this.createdAt,
   });
+
+  /// Etiqueta descriptiva segons l'amplada
+  String get widthLabel {
+    switch (widthCm) {
+      case 40:
+        return 'Estreta (40 cm)';
+      case 60:
+        return 'Mitjana (60 cm)';
+      case 80:
+        return 'Ampla (80 cm)';
+      case 100:
+        return 'Gran (100 cm)';
+      default:
+        return '$widthCm cm';
+    }
+  }
 
   /// Converteix el model a mapa serialitzable per a Cloud Firestore
   Map<String, dynamic> toMap() {
@@ -29,6 +47,7 @@ class BookcaseModel {
       'room': room,
       'shelfCount': shelfCount,
       'bookCount': bookCount,
+      'widthCm': widthCm,
       'order': order,
       'createdAt': Timestamp.fromDate(createdAt),
     };
@@ -53,6 +72,7 @@ class BookcaseModel {
       room: map['room'] as String? ?? '',
       shelfCount: (map['shelfCount'] as num?)?.toInt() ?? 4,
       bookCount: (map['bookCount'] as num?)?.toInt() ?? 0,
+      widthCm: (map['widthCm'] as num?)?.toInt() ?? 80,
       order: (map['order'] as num?)?.toInt() ?? 0,
       createdAt: parseCreatedAt(map['createdAt']),
     );
@@ -65,6 +85,7 @@ class BookcaseModel {
     String? room,
     int? shelfCount,
     int? bookCount,
+    int? widthCm,
     int? order,
     DateTime? createdAt,
   }) {
@@ -74,6 +95,7 @@ class BookcaseModel {
       room: room ?? this.room,
       shelfCount: shelfCount ?? this.shelfCount,
       bookCount: bookCount ?? this.bookCount,
+      widthCm: widthCm ?? this.widthCm,
       order: order ?? this.order,
       createdAt: createdAt ?? this.createdAt,
     );
@@ -87,6 +109,7 @@ class BookcaseModel {
       location: room,
       shelfCount: shelfCount,
       bookCount: bookCount,
+      widthCm: widthCm,
       icon: Icons.shelves,
     );
   }
@@ -100,15 +123,16 @@ class BookcaseModel {
         other.room == room &&
         other.shelfCount == shelfCount &&
         other.bookCount == bookCount &&
+        other.widthCm == widthCm &&
         other.order == order &&
         other.createdAt == createdAt;
   }
 
   @override
-  int get hashCode => Object.hash(id, name, room, shelfCount, bookCount, order, createdAt);
+  int get hashCode => Object.hash(id, name, room, shelfCount, bookCount, widthCm, order, createdAt);
 
   @override
   String toString() {
-    return 'BookcaseModel(id: $id, name: $name, room: $room, shelfCount: $shelfCount, bookCount: $bookCount, order: $order)';
+    return 'BookcaseModel(id: $id, name: $name, room: $room, shelfCount: $shelfCount, bookCount: $bookCount, widthCm: $widthCm, order: $order)';
   }
 }

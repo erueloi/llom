@@ -1,12 +1,16 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/feedback/app_feedback.dart';
 import '../core/theme/app_colors.dart';
 import '../models/book_model.dart';
 import '../models/bookcase_model.dart';
+import '../models/loan_record.dart';
+import '../providers/library_provider.dart';
 import '../services/bookcase_service.dart';
 import '../services/book_enrichment_service.dart';
+import '../services/library_service.dart';
 import 'add_manual_book_dialog.dart';
 
 /// Mostra la Bottom Sheet moderna de detall del llibre amb portada, sinopsi de Google Books i accions
@@ -181,6 +185,51 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
     }
   }
 
+  Future<void> _refreshEnrichmentData() async {
+    if (_isLoadingEnrichment) return;
+
+    setState(() {
+      _isLoadingEnrichment = true;
+    });
+
+    try {
+      final updated = await _enrichmentService.enrichAndPersistBook(
+        book: _currentBook,
+        libraryId: widget.libraryId,
+        force: true,
+      );
+
+      if (mounted) {
+        final hadInfo = _currentBook.synopsis != null || _currentBook.coverUrl != null;
+        final hasNewInfo = updated.synopsis != _currentBook.synopsis ||
+            updated.coverUrl != _currentBook.coverUrl ||
+            updated.pageCount != _currentBook.pageCount ||
+            updated.publishedYear != _currentBook.publishedYear;
+
+        setState(() {
+          _currentBook = updated;
+          _isLoadingEnrichment = false;
+        });
+        widget.onBookChanged?.call();
+
+        if (hasNewInfo) {
+          AppFeedback.showSuccess(context, 'S\'han actualitzat les dades de «${_currentBook.title}».');
+        } else if (hadInfo) {
+          AppFeedback.showInfo(context, 'Les dades de «${_currentBook.title}» ja estan al dia.');
+        } else {
+          AppFeedback.showInfo(context, 'No s\'ha trobat informació addicional per a «${_currentBook.title}».');
+        }
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingEnrichment = false;
+        });
+        AppFeedback.showError(context, 'Error en recarregar les dades: $e');
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final shelfLabel = _getShelfLabel(_currentBook.shelfCode);
@@ -200,18 +249,90 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Nansa superior
-            Center(
-              child: Container(
-                width: 44,
-                height: 5,
-                margin: const EdgeInsets.only(bottom: 16),
-                decoration: BoxDecoration(
-                  color: AppColors.accent.withAlpha(120),
-                  borderRadius: BorderRadius.circular(10),
+            // Barra superior amb nansa centrada i icones d'acció ràpida a la dreta
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                // Nansa superior
+                Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withAlpha(120),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
                 ),
-              ),
+                // Botons d'acció compactes a dalt a la dreta
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      // Botó de recàrrega de dades (sinopsi i portada)
+                      IconButton(
+                        key: const Key('refresh_enrichment_button'),
+                        tooltip: 'Recarregar dades (sinopsi i portada)',
+                        iconSize: 20,
+                        splashRadius: 20,
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(),
+                        icon: _isLoadingEnrichment
+                            ? const SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: AppColors.primary,
+                                ),
+                              )
+                            : const Icon(Icons.refresh_rounded, color: AppColors.textMuted),
+                        onPressed: _isLoadingEnrichment ? null : _refreshEnrichmentData,
+                      ),
+                      const SizedBox(width: 4),
+                      // Botó de localitzar a la balda
+                      IconButton(
+                        key: const Key('locate_on_shelf_button'),
+                        tooltip: 'Localitzar a la balda',
+                        iconSize: 20,
+                        splashRadius: 20,
+                        padding: const EdgeInsets.all(6),
+                        constraints: const BoxConstraints(),
+                        icon: const Icon(Icons.center_focus_strong_rounded, color: AppColors.primary),
+                        onPressed: _locateBookOnShelf,
+                      ),
+                      if (widget.canEdit) ...[
+                        const SizedBox(width: 4),
+                        // Botó de préstec o retornar
+                        if (_currentBook.isBorrowed)
+                          IconButton(
+                            key: const Key('return_book_button'),
+                            tooltip: 'Retornar a la balda',
+                            iconSize: 20,
+                            splashRadius: 20,
+                            padding: const EdgeInsets.all(6),
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(Icons.inbox_rounded, color: Color(0xFF2E7D32)),
+                            onPressed: _returnBookToShelf,
+                          )
+                        else
+                          IconButton(
+                            key: const Key('borrow_book_button'),
+                            tooltip: 'Treure de la balda / Marcar prestat',
+                            iconSize: 20,
+                            splashRadius: 20,
+                            padding: const EdgeInsets.all(6),
+                            constraints: const BoxConstraints(),
+                            icon: const Icon(Icons.outbox_rounded, color: Color(0xFFE65100)),
+                            onPressed: _showBorrowDialog,
+                          ),
+                      ],
+                    ],
+                  ),
+                ),
+              ],
             ),
+
+            const SizedBox(height: 10),
 
             // Capçalera moderna: Portada + Dades principals
             Row(
@@ -257,6 +378,38 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
 
             const SizedBox(height: 16),
 
+            // Banner informatiu si el llibre està en préstec / fora de la balda
+            if (_currentBook.isBorrowed)
+              Container(
+                key: const Key('borrowed_info_banner'),
+                margin: const EdgeInsets.only(bottom: 14),
+                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+                decoration: BoxDecoration(
+                  color: const Color(0xFFFFF3E0),
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(
+                    color: const Color(0xFFFFB74D),
+                    width: 1.2,
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.outbox_rounded, color: Color(0xFFE65100), size: 22),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '📖 Fora de la balda: prestat a ${_currentBook.borrowedTo ?? 'desconegut'}${_currentBook.borrowedAt != null ? ' el ${_formatDate(_currentBook.borrowedAt)}' : ''}',
+                        style: const TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: Color(0xFFBF360C),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
             // Xips d'Ubicació Física
             Wrap(
               spacing: 8,
@@ -273,6 +426,13 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
                   subLabel: positionLabel,
                   highlight: true,
                 ),
+                if (_currentBook.isBorrowed)
+                  _buildChip(
+                    icon: Icons.person_outline_rounded,
+                    label: 'En préstec',
+                    subLabel: _currentBook.borrowedTo ?? 'En lectura',
+                    highlight: true,
+                  ),
               ],
             ),
 
@@ -281,34 +441,31 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
             // Bloc de Sinopsi
             _buildSynopsisSection(),
 
-            const SizedBox(height: 24),
-
-            // Botó destacat «Localitzar a la balda»
-            SizedBox(
-              width: double.infinity,
-              height: 50,
-              child: ElevatedButton.icon(
-                key: const Key('locate_on_shelf_button'),
-                onPressed: _locateBookOnShelf,
-                icon: const Icon(Icons.center_focus_strong_rounded, size: 22),
-                label: const Text(
-                  'Localitzar a la balda',
-                  style: TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    letterSpacing: 0.2,
+            if (_currentBook.loanHistory.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              SizedBox(
+                width: double.infinity,
+                height: 42,
+                child: OutlinedButton.icon(
+                  key: const Key('loan_history_button'),
+                  onPressed: _showLoanHistoryDialog,
+                  icon: const Icon(Icons.history_rounded, size: 19, color: AppColors.primary),
+                  label: Text(
+                    'Historial de préstecs (${_currentBook.loanHistory.length})',
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textMain,
+                    ),
                   ),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  elevation: 2,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(14),
+                  style: OutlinedButton.styleFrom(
+                    side: BorderSide(color: AppColors.accent.withAlpha(150)),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    backgroundColor: AppColors.surface,
                   ),
                 ),
               ),
-            ),
+            ],
 
             const SizedBox(height: 12),
 
@@ -732,6 +889,528 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
         }
       }
     }
+  }
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'data desconeguda';
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  Future<void> _returnBookToShelf() async {
+    try {
+      if (widget.libraryId.isNotEmpty) {
+        await _bookcaseService.toggleBookBorrowedStatus(
+          libraryId: widget.libraryId,
+          bookId: _currentBook.id,
+          isBorrowed: false,
+        );
+      }
+      if (mounted) {
+        final now = DateTime.now();
+        final updatedHistory = List<LoanRecord>.from(_currentBook.loanHistory);
+        final activeIndex = updatedHistory.lastIndexWhere((r) => r.returnedAt == null);
+        if (activeIndex != -1) {
+          updatedHistory[activeIndex] = updatedHistory[activeIndex].copyWith(returnedAt: now);
+        } else if (_currentBook.isBorrowed) {
+          updatedHistory.add(LoanRecord(
+            id: '${now.millisecondsSinceEpoch}',
+            borrowedTo: _currentBook.borrowedTo ?? 'En lectura',
+            borrowedAt: _currentBook.borrowedAt ?? now,
+            returnedAt: now,
+          ));
+        }
+        setState(() {
+          _currentBook = _currentBook.copyWith(
+            isBorrowed: false,
+            borrowedTo: null,
+            borrowedAt: null,
+            loanHistory: updatedHistory,
+          );
+        });
+        widget.onBookChanged?.call();
+        AppFeedback.showSuccess(context, 'S\'ha retornat «${_currentBook.title}» a la balda.');
+      }
+    } catch (e) {
+      if (mounted) {
+        AppFeedback.showError(context, 'Error en retornar el llibre: $e');
+      }
+    }
+  }
+
+  void _showLoanHistoryDialog() {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppColors.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => _LoanHistoryBottomSheet(book: _currentBook),
+    );
+  }
+
+  Future<void> _showBorrowDialog() async {
+    LibraryProvider? libraryProvider;
+    try {
+      libraryProvider = Provider.of<LibraryProvider>(context, listen: false);
+    } catch (_) {
+      // Entorn de proves sense Provider
+    }
+
+    final activeLib = libraryProvider?.activeLibrary;
+    final currentUser = libraryProvider?.currentUser;
+
+    final Set<String> suggestionSet = {};
+    if (currentUser?.displayName != null && currentUser!.displayName!.trim().isNotEmpty) {
+      suggestionSet.add(currentUser.displayName!.trim());
+    }
+    suggestionSet.add('Jo mateix / Llegint');
+    suggestionSet.add('Familiar');
+    suggestionSet.add('Amic/ga');
+
+    if (activeLib != null) {
+      for (final fb in activeLib.frequentBorrowers) {
+        if (fb.trim().isNotEmpty) {
+          suggestionSet.add(fb.trim());
+        }
+      }
+    }
+
+    final result = await showDialog<BorrowDialogResult>(
+      context: context,
+      builder: (dialogContext) => _BorrowBookDialog(
+        suggestions: suggestionSet.toList(),
+        initialDateTime: DateTime.now(),
+      ),
+    );
+
+    if (result != null && mounted) {
+      final borrower = result.borrower;
+      final borrowedAt = result.borrowedAt;
+      try {
+        if (widget.libraryId.isNotEmpty) {
+          await _bookcaseService.toggleBookBorrowedStatus(
+            libraryId: widget.libraryId,
+            bookId: _currentBook.id,
+            isBorrowed: true,
+            borrowedTo: borrower,
+            borrowedAt: borrowedAt,
+          );
+
+          // Si el prestatari no és a frequentBorrowers ni és un dels genèrics, desar-lo
+          final isGeneric = borrower == 'Jo mateix / Llegint' ||
+              borrower == 'Familiar' ||
+              borrower == 'Amic/ga' ||
+              borrower == 'En lectura';
+          if (!isGeneric) {
+            final libraryService = LibraryService();
+            await libraryService.addFrequentBorrower(
+              libraryId: widget.libraryId,
+              borrowerName: borrower,
+            );
+          }
+        }
+        if (mounted) {
+          final newRecord = LoanRecord(
+            id: '${borrowedAt.millisecondsSinceEpoch}',
+            borrowedTo: borrower,
+            borrowedAt: borrowedAt,
+            returnedAt: null,
+          );
+          setState(() {
+            _currentBook = _currentBook.copyWith(
+              isBorrowed: true,
+              borrowedTo: borrower,
+              borrowedAt: borrowedAt,
+              loanHistory: [..._currentBook.loanHistory, newRecord],
+            );
+          });
+          widget.onBookChanged?.call();
+          AppFeedback.showSuccess(context, 'S\'ha marcat «${_currentBook.title}» com a prestat.');
+        }
+      } catch (e) {
+        if (mounted) {
+          AppFeedback.showError(context, 'Error en marcar com a prestat: $e');
+        }
+      }
+    }
+  }
+}
+
+/// Resultat retornat pel diàleg de préstec
+class BorrowDialogResult {
+  final String borrower;
+  final DateTime borrowedAt;
+
+  const BorrowDialogResult({
+    required this.borrower,
+    required this.borrowedAt,
+  });
+}
+
+/// Modal / diàleg per treure un llibre de la balda amb xips de suggeriments i selector de data/hora
+class _BorrowBookDialog extends StatefulWidget {
+  final List<String> suggestions;
+  final DateTime initialDateTime;
+
+  const _BorrowBookDialog({
+    required this.suggestions,
+    required this.initialDateTime,
+  });
+
+  @override
+  State<_BorrowBookDialog> createState() => _BorrowBookDialogState();
+}
+
+class _BorrowBookDialogState extends State<_BorrowBookDialog> {
+  late final TextEditingController _controller;
+  late DateTime _selectedDateTime;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(
+      text: widget.suggestions.isNotEmpty ? widget.suggestions.first : 'Jo mateix / Llegint',
+    );
+    _selectedDateTime = widget.initialDateTime;
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  String _formatDateTime(DateTime dt) {
+    final d = dt.day.toString().padLeft(2, '0');
+    final m = dt.month.toString().padLeft(2, '0');
+    final y = dt.year;
+    final h = dt.hour.toString().padLeft(2, '0');
+    final min = dt.minute.toString().padLeft(2, '0');
+    return '$d/$m/$y · $h:$min';
+  }
+
+  Future<void> _pickDateTime() async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _selectedDateTime,
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      cancelText: 'Cancel·lar',
+      confirmText: 'Acceptar',
+    );
+    if (pickedDate == null || !mounted) return;
+
+    final pickedTime = await showTimePicker(
+      context: context,
+      initialTime: TimeOfDay.fromDateTime(_selectedDateTime),
+      cancelText: 'Cancel·lar',
+      confirmText: 'Acceptar',
+    );
+    if (pickedTime == null || !mounted) return;
+
+    setState(() {
+      _selectedDateTime = DateTime(
+        pickedDate.year,
+        pickedDate.month,
+        pickedDate.day,
+        pickedTime.hour,
+        pickedTime.minute,
+      );
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Row(
+        children: [
+          Icon(Icons.outbox_rounded, color: Color(0xFFE65100), size: 24),
+          SizedBox(width: 8),
+          Expanded(
+            child: Text(
+              'Treure de la balda',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+              'A qui el prestes o qui l\'està llegint?',
+              style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              key: const Key('borrowed_to_text_field'),
+              controller: _controller,
+              autofocus: true,
+              decoration: InputDecoration(
+                hintText: 'Nom de la persona...',
+                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                prefixIcon: const Icon(Icons.person_outline_rounded),
+              ),
+            ),
+            const SizedBox(height: 12),
+            if (widget.suggestions.isNotEmpty) ...[
+              const Text(
+                'Suggeriments habituals:',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textMuted),
+              ),
+              const SizedBox(height: 6),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: widget.suggestions.map((suggestion) {
+                  return ActionChip(
+                    key: Key('borrow_chip_$suggestion'),
+                    label: Text(suggestion, style: const TextStyle(fontSize: 12)),
+                    onPressed: () {
+                      _controller.text = suggestion;
+                      _controller.selection = TextSelection.fromPosition(
+                        TextPosition(offset: _controller.text.length),
+                      );
+                    },
+                  );
+                }).toList(),
+              ),
+              const SizedBox(height: 16),
+            ],
+            const Text(
+              'Data i hora d\'inici:',
+              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.textMuted),
+            ),
+            const SizedBox(height: 6),
+            InkWell(
+              key: const Key('borrow_date_picker_button'),
+              borderRadius: BorderRadius.circular(12),
+              onTap: _pickDateTime,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  border: Border.all(color: AppColors.accent.withAlpha(160)),
+                  borderRadius: BorderRadius.circular(12),
+                  color: AppColors.surface,
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.event_note_rounded, size: 18, color: AppColors.primary),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        _formatDateTime(_selectedDateTime),
+                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                      ),
+                    ),
+                    const Icon(Icons.edit_calendar_rounded, size: 18, color: AppColors.textMuted),
+                  ],
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: const Text('Cancel·lar'),
+        ),
+        ElevatedButton(
+          key: const Key('confirm_borrow_button'),
+          style: ElevatedButton.styleFrom(
+            backgroundColor: AppColors.primary,
+            foregroundColor: Colors.white,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+          ),
+          onPressed: () {
+            final borrower = _controller.text.trim().isNotEmpty
+                ? _controller.text.trim()
+                : 'En lectura';
+            Navigator.of(context).pop(
+              BorrowDialogResult(
+                borrower: borrower,
+                borrowedAt: _selectedDateTime,
+              ),
+            );
+          },
+          child: const Text('Confirmar'),
+        ),
+      ],
+    );
+  }
+}
+
+/// Visualitzador de l'historial complet de préstecs d'un llibre
+class _LoanHistoryBottomSheet extends StatelessWidget {
+  final BookModel book;
+
+  const _LoanHistoryBottomSheet({required this.book});
+
+  String _formatDate(DateTime? date) {
+    if (date == null) return 'data desconeguda';
+    return '${date.day.toString().padLeft(2, '0')}/${date.month.toString().padLeft(2, '0')}/${date.year}';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final sortedHistory = List<LoanRecord>.from(book.loanHistory)
+      ..sort((a, b) => b.borrowedAt.compareTo(a.borrowedAt));
+
+    return SafeArea(
+      key: const Key('loan_history_sheet'),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Center(
+              child: Container(
+                width: 44,
+                height: 5,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withAlpha(120),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+            ),
+            Row(
+              children: [
+                const Icon(Icons.history_rounded, color: AppColors.primary, size: 26),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Historial de préstecs',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: AppColors.textMain,
+                        ),
+                      ),
+                      Text(
+                        book.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 13,
+                          color: AppColors.textMuted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Flexible(
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: sortedHistory.length,
+                separatorBuilder: (context, index) => const Divider(height: 12),
+                itemBuilder: (context, index) {
+                  final record = sortedHistory[index];
+                  final isCurrent = record.returnedAt == null;
+                  final days = record.durationInDays;
+                  final daysLabel = days == 1 ? '1 dia' : '$days dies';
+
+                  return Container(
+                    padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 4),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: isCurrent
+                                ? const Color(0xFFFFF3E0)
+                                : const Color(0xFFE8F5E9),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(
+                            isCurrent ? Icons.outbox_rounded : Icons.check_circle_rounded,
+                            size: 20,
+                            color: isCurrent
+                                ? const Color(0xFFE65100)
+                                : const Color(0xFF2E7D32),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                record.borrowedTo,
+                                style: const TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textMain,
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(
+                                '${_formatDate(record.borrowedAt)} → ${record.returnedAt != null ? _formatDate(record.returnedAt) : 'En curs'}',
+                                style: const TextStyle(
+                                  fontSize: 12.5,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                          decoration: BoxDecoration(
+                            color: isCurrent
+                                ? const Color(0xFFFFE0B2)
+                                : AppColors.surface,
+                            border: Border.all(
+                              color: isCurrent
+                                  ? const Color(0xFFFFB74D)
+                                  : AppColors.accent.withAlpha(120),
+                            ),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            isCurrent ? 'En curs ($daysLabel)' : daysLabel,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.bold,
+                              color: isCurrent
+                                  ? const Color(0xFFBF360C)
+                                  : AppColors.textMuted,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+            const SizedBox(height: 16),
+            SizedBox(
+              width: double.infinity,
+              height: 44,
+              child: TextButton(
+                key: const Key('close_loan_history_button'),
+                onPressed: () => Navigator.of(context).pop(),
+                child: const Text('Tancar', style: TextStyle(fontSize: 15)),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

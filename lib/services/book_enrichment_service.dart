@@ -482,32 +482,44 @@ class BookEnrichmentService {
   Future<BookModel> enrichAndPersistBook({
     required BookModel book,
     required String libraryId,
+    bool force = false,
   }) async {
     final bool hasSynopsis = book.synopsis != null && book.synopsis!.isNotEmpty;
     final bool hasCover = book.coverUrl != null && book.coverUrl!.isNotEmpty;
 
-    // 1. Si el llibre ja disposa tant de sinopsi com de portada, està 100% complet
-    if (hasSynopsis && hasCover) {
-      return book;
+    if (!force) {
+      // 1. Si el llibre ja disposa tant de sinopsi com de portada, està 100% complet
+      if (hasSynopsis && hasCover) {
+        return book;
+      }
+
+      // 2. Si ja s'han assolit 3 intents o més per recuperar el que falta, ho deixem estar
+      if (book.enrichmentAttempts >= 3) {
+        return book;
+      }
+    } else {
+      // Si és forçat per l'usuari, buidem la memòria cau per a aquest llibre
+      final cleanTitle = cleanSearchTerm(book.title);
+      final cleanAuthor = cleanSearchTerm(book.author);
+      _cache.remove(_generateCacheKey(cleanTitle, cleanAuthor));
     }
 
-    // 2. Si ja s'han assolit 3 intents o més per recuperar el que falta, ho deixem estar
-    if (book.enrichmentAttempts >= 3) {
-      return book;
-    }
-
-    final nextAttempts = book.enrichmentAttempts + 1;
+    final nextAttempts = force ? 1 : (book.enrichmentAttempts + 1);
 
     final enrichment = await fetchEnrichmentData(
       title: book.title,
       author: book.author,
     );
 
-    final newSynopsis = hasSynopsis ? book.synopsis : (enrichment?.synopsis ?? book.synopsis);
-    final newCoverUrl = hasCover ? book.coverUrl : (enrichment?.coverUrl ?? book.coverUrl);
-    final newPageCount = book.pageCount ?? enrichment?.pageCount;
-    final newPublishedYear = book.publishedYear ?? enrichment?.publishedYear;
-    final newInfoUrl = book.infoUrl ?? enrichment?.infoUrl;
+    final newSynopsis = (force && enrichment?.synopsis != null && enrichment!.synopsis!.isNotEmpty)
+        ? enrichment.synopsis
+        : (hasSynopsis ? book.synopsis : (enrichment?.synopsis ?? book.synopsis));
+    final newCoverUrl = (force && enrichment?.coverUrl != null && enrichment!.coverUrl!.isNotEmpty)
+        ? enrichment.coverUrl
+        : (hasCover ? book.coverUrl : (enrichment?.coverUrl ?? book.coverUrl));
+    final newPageCount = enrichment?.pageCount ?? book.pageCount;
+    final newPublishedYear = enrichment?.publishedYear ?? book.publishedYear;
+    final newInfoUrl = enrichment?.infoUrl ?? book.infoUrl;
 
     final updatedBook = book.copyWith(
       synopsis: newSynopsis,

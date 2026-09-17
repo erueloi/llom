@@ -87,12 +87,16 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
         ? 16.0
         : (_isHoveredOrPressed ? 12.0 : 0.0);
 
+    final double effectiveOpacity = widget.book.isBorrowed
+        ? 0.45
+        : (widget.isDimmed ? 0.4 : 1.0);
+
     return Semantics(
       button: true,
-      label: 'Llibre ${widget.book.title} per ${widget.book.author}, posició $orderLabel',
+      label: 'Llibre ${widget.book.title} per ${widget.book.author}, posició $orderLabel${widget.book.isBorrowed ? ', fora de la balda: ${widget.book.borrowedTo ?? 'En lectura'}' : ''}',
       child: AnimatedOpacity(
         duration: const Duration(milliseconds: 250),
-        opacity: widget.isDimmed ? 0.4 : 1.0, // Opacitat 0.4 si la cerca no coincideix
+        opacity: effectiveOpacity,
         child: MouseRegion(
           onEnter: (_) => setState(() => _isHoveredOrPressed = true),
           onExit: (_) => setState(() => _isHoveredOrPressed = false),
@@ -106,7 +110,7 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
               clipBehavior: Clip.none,
               alignment: Alignment.bottomCenter,
               children: [
-                // Llom de llibre
+                // Llom de llibre (Llom Fantasma si està en préstec)
                 AnimatedContainer(
                   duration: const Duration(milliseconds: 180),
                   curve: Curves.easeOutCubic,
@@ -118,15 +122,17 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
                   width: width,
                   height: height,
                   decoration: BoxDecoration(
-                    color: spineColor,
+                    color: widget.book.isBorrowed ? spineColor.withAlpha(90) : spineColor,
                     borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                     border: Border.all(
                       color: widget.isHighlighted
                           ? AppColors.primaryDark
-                          : (spineColor == Colors.white
-                              ? AppColors.accent.withAlpha(150)
-                              : AppColors.accent.withAlpha(90)),
-                      width: widget.isHighlighted ? 2.5 : 1.0,
+                          : (widget.book.isBorrowed
+                              ? AppColors.primary.withAlpha(170)
+                              : (spineColor == Colors.white
+                                  ? AppColors.accent.withAlpha(150)
+                                  : AppColors.accent.withAlpha(90))),
+                      width: widget.isHighlighted ? 2.5 : (widget.book.isBorrowed ? 1.5 : 1.0),
                     ),
                     boxShadow: [
                       BoxShadow(
@@ -242,6 +248,35 @@ class _BookSpineWidgetState extends State<BookSpineWidget> {
                         Icons.arrow_downward_rounded,
                         color: Colors.white,
                         size: 16,
+                      ),
+                    ),
+                  ),
+
+                // Indicador visual de llibre fora de la balda / en préstec
+                if (widget.book.isBorrowed)
+                  Positioned(
+                    bottom: height + bottomElevation + (widget.isHighlighted ? 28 : 4),
+                    child: Tooltip(
+                      message: 'Fora de la balda: ${widget.book.borrowedTo ?? 'En lectura'}',
+                      child: Container(
+                        key: const Key('borrowed_book_indicator'),
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          color: const Color(0xFFE65100), // Taronja càlid de préstec
+                          shape: BoxShape.circle,
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withAlpha(40),
+                              blurRadius: 4,
+                              offset: const Offset(0, 1),
+                            ),
+                          ],
+                        ),
+                        child: const Icon(
+                          Icons.menu_book_rounded,
+                          color: Colors.white,
+                          size: 13,
+                        ),
                       ),
                     ),
                   ),

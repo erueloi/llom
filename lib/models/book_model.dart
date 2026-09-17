@@ -1,4 +1,6 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
+import 'package:llom/models/loan_record.dart';
 
 class BookModel {
   final String id;
@@ -16,6 +18,10 @@ class BookModel {
   final String? publishedYear;
   final String? infoUrl;
   final int enrichmentAttempts;
+  final bool isBorrowed;
+  final String? borrowedTo;
+  final DateTime? borrowedAt;
+  final List<LoanRecord> loanHistory;
   final DateTime createdAt;
 
   const BookModel({
@@ -34,6 +40,10 @@ class BookModel {
     this.publishedYear,
     this.infoUrl,
     this.enrichmentAttempts = 0,
+    this.isBorrowed = false,
+    this.borrowedTo,
+    this.borrowedAt,
+    this.loanHistory = const [],
     required this.createdAt,
   });
 
@@ -54,6 +64,11 @@ class BookModel {
       if (publishedYear != null) 'publishedYear': publishedYear,
       if (infoUrl != null) 'infoUrl': infoUrl,
       if (enrichmentAttempts > 0) 'enrichmentAttempts': enrichmentAttempts,
+      'isBorrowed': isBorrowed,
+      if (borrowedTo != null) 'borrowedTo': borrowedTo,
+      if (borrowedAt != null) 'borrowedAt': Timestamp.fromDate(borrowedAt!),
+      if (loanHistory.isNotEmpty)
+        'loanHistory': loanHistory.map((e) => e.toMap()).toList(),
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
@@ -76,6 +91,13 @@ class BookModel {
       publishedYear: map['publishedYear'] as String?,
       infoUrl: map['infoUrl'] as String?,
       enrichmentAttempts: (map['enrichmentAttempts'] as num?)?.toInt() ?? 0,
+      isBorrowed: map['isBorrowed'] as bool? ?? false,
+      borrowedTo: map['borrowedTo'] as String?,
+      borrowedAt: map['borrowedAt'] != null ? _parseDateTime(map['borrowedAt']) : null,
+      loanHistory: (map['loanHistory'] as List<dynamic>?)
+              ?.map((e) => LoanRecord.fromMap(Map<String, dynamic>.from(e as Map)))
+              .toList() ??
+          const [],
       createdAt: _parseDateTime(map['createdAt']),
     );
   }
@@ -97,6 +119,10 @@ class BookModel {
     String? publishedYear,
     String? infoUrl,
     int? enrichmentAttempts,
+    bool? isBorrowed,
+    String? borrowedTo,
+    DateTime? borrowedAt,
+    List<LoanRecord>? loanHistory,
     DateTime? createdAt,
   }) {
     return BookModel(
@@ -115,6 +141,10 @@ class BookModel {
       publishedYear: publishedYear ?? this.publishedYear,
       infoUrl: infoUrl ?? this.infoUrl,
       enrichmentAttempts: enrichmentAttempts ?? this.enrichmentAttempts,
+      isBorrowed: isBorrowed ?? this.isBorrowed,
+      borrowedTo: borrowedTo ?? this.borrowedTo,
+      borrowedAt: borrowedAt ?? this.borrowedAt,
+      loanHistory: loanHistory ?? this.loanHistory,
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -151,6 +181,10 @@ class BookModel {
           publishedYear == other.publishedYear &&
           infoUrl == other.infoUrl &&
           enrichmentAttempts == other.enrichmentAttempts &&
+          isBorrowed == other.isBorrowed &&
+          borrowedTo == other.borrowedTo &&
+          borrowedAt == other.borrowedAt &&
+          listEquals(loanHistory, other.loanHistory) &&
           createdAt == other.createdAt;
 
   @override
@@ -169,10 +203,14 @@ class BookModel {
       publishedYear.hashCode ^
       infoUrl.hashCode ^
       enrichmentAttempts.hashCode ^
+      isBorrowed.hashCode ^
+      borrowedTo.hashCode ^
+      borrowedAt.hashCode ^
+      loanHistory.length.hashCode ^
       createdAt.hashCode;
 
   @override
   String toString() {
-    return 'BookModel(id: $id, title: $title, author: $author, shelfCode: $shelfCode, bookcaseId: $bookcaseId, positionIndex: $positionIndex, photoUrl: $photoUrl, notes: $notes, box: $box, synopsis: $synopsis, coverUrl: $coverUrl, pageCount: $pageCount, publishedYear: $publishedYear, infoUrl: $infoUrl, enrichmentAttempts: $enrichmentAttempts, createdAt: $createdAt)';
+    return 'BookModel(id: $id, title: $title, author: $author, shelfCode: $shelfCode, bookcaseId: $bookcaseId, positionIndex: $positionIndex, photoUrl: $photoUrl, notes: $notes, box: $box, synopsis: $synopsis, coverUrl: $coverUrl, pageCount: $pageCount, publishedYear: $publishedYear, infoUrl: $infoUrl, enrichmentAttempts: $enrichmentAttempts, isBorrowed: $isBorrowed, borrowedTo: $borrowedTo, borrowedAt: $borrowedAt, loanHistory: $loanHistory, createdAt: $createdAt)';
   }
 }

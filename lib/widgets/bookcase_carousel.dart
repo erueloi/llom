@@ -30,7 +30,7 @@ class BookcaseCarousel extends StatefulWidget {
 class _BookcaseCarouselState extends State<BookcaseCarousel> {
   late PageController _pageController;
   double _currentPage = 0.0;
-  double _currentViewportFraction = 0.78;
+  double _currentViewportFraction = 0.74;
 
   @override
   void initState() {
@@ -94,8 +94,15 @@ class _BookcaseCarouselState extends State<BookcaseCarousel> {
   Widget build(BuildContext context) {
     return LayoutBuilder(
       builder: (context, constraints) {
-        // En mòbil: 0.78; En tauleta/web: 0.55
-        final targetFraction = constraints.maxWidth < 600 ? 0.78 : 0.55;
+        // En mòbil: 0.74; En tauleta: 0.48; En web/escriptori: 0.40 (proporcions molt més compactes i naturals)
+        final double targetFraction;
+        if (constraints.maxWidth < 600) {
+          targetFraction = 0.74;
+        } else if (constraints.maxWidth < 900) {
+          targetFraction = 0.48;
+        } else {
+          targetFraction = 0.40;
+        }
         _updateViewportFractionIfNeeded(targetFraction);
 
         final canGoBack = _currentPage > 0.2;
@@ -104,7 +111,7 @@ class _BookcaseCarouselState extends State<BookcaseCarousel> {
         return Stack(
           alignment: Alignment.center,
           children: [
-            // PageView amb Cover Flow efecte
+            // PageView amb Cover Flow efecte compacte i coherent
             PageView.builder(
               controller: _pageController,
               itemCount: widget.units.length,
@@ -116,38 +123,54 @@ class _BookcaseCarouselState extends State<BookcaseCarousel> {
                 final double diff = (index - _currentPage).abs();
                 final double normalizedDiff = diff.clamp(0.0, 1.0);
 
-                // Interpolació suau d'escala (1.0 al centre, 0.85 als laterals)
-                final double scale = 1.0 - (0.15 * normalizedDiff);
+                // Interpolació suau d'escala (1.0 al centre, 0.88 als laterals)
+                final double scale = 1.0 - (0.12 * normalizedDiff);
 
-                // Interpolació d'opacitat (1.0 al centre, 0.55 als laterals)
-                final double opacity = 1.0 - (0.45 * normalizedDiff);
+                // Interpolació d'opacitat (1.0 al centre, 0.60 als laterals)
+                final double opacity = 1.0 - (0.40 * normalizedDiff);
 
                 final bool isCenter = diff < 0.5;
 
-                return Transform.scale(
-                  scale: scale,
-                  child: Opacity(
-                    opacity: opacity,
-                    child: BookcaseCard(
-                      unit: unit,
-                      isFocused: isCenter,
-                      canEdit: widget.canEdit,
-                      shelfBookCounts: widget.shelfBookCountsMap?[unit.id],
-                      onEdit: widget.onEditUnit != null ? () => widget.onEditUnit!(unit) : null,
-                      onDelete: widget.onDeleteUnit != null ? () => widget.onDeleteUnit!(unit) : null,
-                      onTap: () {
-                        if (isCenter) {
-                          // Si es toca el moble central, navega al detall
-                          widget.onUnitSelected(unit);
-                        } else {
-                          // Si es toca un lateral, s'anima per centrar-lo
-                          _pageController.animateToPage(
-                            index,
-                            duration: const Duration(milliseconds: 350),
-                            curve: Curves.easeOutCubic,
-                          );
-                        }
-                      },
+                // Ajust de proximitat: si el moble central és més estret o en pantalles amples,
+                // apropem els mobles laterals cap al centre perquè la composició sigui compacta i natural
+                final double signedDiff = index - _currentPage;
+                final int centerIndex = _currentPage.round().clamp(0, widget.units.length - 1);
+                final centerUnit = widget.units[centerIndex];
+
+                final double centerFactor = (0.68 + (centerUnit.widthCm / 80.0) * 0.32).clamp(0.82, 1.0);
+                final double emptyCenterHalfFraction = (1.0 - centerFactor) / 2.0;
+                final double slotWidth = constraints.maxWidth * _currentViewportFraction;
+                // Compensació exacta de l'espai buit del moble estret + compressió suau dels laterals
+                final double pullPixels = (emptyCenterHalfFraction * slotWidth) + 16.0;
+                final double shiftX = -signedDiff.sign * signedDiff.abs().clamp(0.0, 1.0) * pullPixels;
+
+                return Transform.translate(
+                  offset: Offset(shiftX, 0),
+                  child: Transform.scale(
+                    scale: scale,
+                    child: Opacity(
+                      opacity: opacity,
+                      child: BookcaseCard(
+                        unit: unit,
+                        isFocused: isCenter,
+                        canEdit: widget.canEdit,
+                        shelfBookCounts: widget.shelfBookCountsMap?[unit.id],
+                        onEdit: widget.onEditUnit != null ? () => widget.onEditUnit!(unit) : null,
+                        onDelete: widget.onDeleteUnit != null ? () => widget.onDeleteUnit!(unit) : null,
+                        onTap: () {
+                          if (isCenter) {
+                            // Si es toca el moble central, navega al detall
+                            widget.onUnitSelected(unit);
+                          } else {
+                            // Si es toca un lateral, s'anima per centrar-lo
+                            _pageController.animateToPage(
+                              index,
+                              duration: const Duration(milliseconds: 350),
+                              curve: Curves.easeOutCubic,
+                            );
+                          }
+                        },
+                      ),
                     ),
                   ),
                 );

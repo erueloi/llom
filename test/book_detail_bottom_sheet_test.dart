@@ -9,7 +9,27 @@ import 'package:llom/main.dart';
 import 'package:llom/models/book_model.dart';
 import 'package:llom/models/bookcase_model.dart';
 import 'package:llom/services/book_enrichment_service.dart';
+import 'package:llom/services/bookcase_service.dart';
 import 'package:llom/widgets/book_detail_bottom_sheet.dart';
+
+class MockBookcaseServiceForSheet extends BookcaseService {
+  bool toggleCalled = false;
+  bool? lastIsBorrowed;
+  String? lastBorrowedTo;
+
+  @override
+  Future<void> toggleBookBorrowedStatus({
+    required String libraryId,
+    required String bookId,
+    required bool isBorrowed,
+    String? borrowedTo,
+    DateTime? borrowedAt,
+  }) async {
+    toggleCalled = true;
+    lastIsBorrowed = isBorrowed;
+    lastBorrowedTo = borrowedTo;
+  }
+}
 
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
@@ -44,6 +64,7 @@ void main() {
     required BookModel book,
     required BookcaseModel bookcase,
     bool canEdit = true,
+    BookcaseService? bookcaseService,
     BookEnrichmentService? enrichmentService,
     String libraryId = 'lib_test_123',
   }) {
@@ -61,6 +82,7 @@ void main() {
                     bookcase: bookcase,
                     libraryId: libraryId,
                     canEdit: canEdit,
+                    bookcaseService: bookcaseService,
                     enrichmentService: enrichmentService,
                   );
                 },
@@ -329,6 +351,112 @@ void main() {
 
       expect(find.text('Fitxa del llibre'), findsOneWidget);
       expect(find.byIcon(Icons.open_in_new_rounded), findsOneWidget);
+    });
+
+    testWidgets('Renders borrow button when not borrowed, opens dialog and confirms borrow', (tester) async {
+      final mockService = MockBookcaseServiceForSheet();
+      await tester.pumpWidget(createTestWidget(
+        book: testBook,
+        bookcase: testBookcase,
+        bookcaseService: mockService,
+      ));
+
+      await tester.tap(find.byKey(const Key('open_sheet_button')));
+      await tester.pumpAndSettle();
+
+      // No està prestat -> no hi ha banner, hi ha botó de prestar
+      expect(find.byKey(const Key('borrowed_info_banner')), findsNothing);
+      final borrowBtn = find.byKey(const Key('borrow_book_button'));
+      expect(borrowBtn, findsOneWidget);
+
+      await tester.ensureVisible(borrowBtn);
+      await tester.tap(borrowBtn);
+      await tester.pumpAndSettle();
+
+      // S'obre el diàleg de préstec
+      expect(find.text('Treure de la balda'), findsOneWidget);
+      expect(find.byKey(const Key('borrowed_to_text_field')), findsOneWidget);
+
+      // Prémer chip 'Amic/ga'
+      await tester.tap(find.text('Amic/ga'));
+      await tester.pumpAndSettle();
+
+      // Confirmar
+      await tester.tap(find.byKey(const Key('confirm_borrow_button')));
+      await tester.pumpAndSettle();
+
+      expect(mockService.toggleCalled, isTrue);
+      expect(mockService.lastIsBorrowed, isTrue);
+      expect(mockService.lastBorrowedTo, 'Amic/ga');
+
+      // Ara es mostra el banner de llibre fora de la balda i el botó de retornar
+      expect(find.byKey(const Key('borrowed_info_banner')), findsOneWidget);
+      expect(find.text('Amic/ga'), findsOneWidget);
+      expect(find.byKey(const Key('return_book_button')), findsOneWidget);
+    });
+
+    testWidgets('Renders borrowed banner and return button when borrowed; clicking returns book', (tester) async {
+      final mockService = MockBookcaseServiceForSheet();
+      final borrowedBook = testBook.copyWith(
+        isBorrowed: true,
+        borrowedTo: 'Carme',
+        borrowedAt: DateTime(2026, 9, 10),
+      );
+
+      await tester.pumpWidget(createTestWidget(
+        book: borrowedBook,
+        bookcase: testBookcase,
+        bookcaseService: mockService,
+      ));
+
+      await tester.tap(find.byKey(const Key('open_sheet_button')));
+      await tester.pumpAndSettle();
+
+      // Està prestat
+      expect(find.byKey(const Key('borrowed_info_banner')), findsOneWidget);
+      expect(find.text('Carme'), findsOneWidget);
+      expect(find.textContaining('10/09/2026'), findsOneWidget);
+
+      final returnBtn = find.byKey(const Key('return_book_button'));
+      expect(returnBtn, findsOneWidget);
+      expect(find.byKey(const Key('borrow_book_button')), findsNothing);
+
+      await tester.ensureVisible(returnBtn);
+      await tester.tap(returnBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockService.toggleCalled, isTrue);
+      expect(mockService.lastIsBorrowed, isFalse);
+      expect(find.byKey(const Key('borrowed_info_banner')), findsNothing);
+      expect(find.byKey(const Key('borrow_book_button')), findsOneWidget);
+    });
+
+    testWidgets('Header renders top-right compact action icons with tooltips', (tester) async {
+      await tester.pumpWidget(createTestWidget(
+        book: testBook,
+        bookcase: testBookcase,
+      ));
+
+      await tester.tap(find.byKey(const Key('open_sheet_button')));
+      await tester.pumpAndSettle();
+
+      // Botó de recàrrega de dades
+      final refreshFinder = find.byKey(const Key('refresh_enrichment_button'));
+      expect(refreshFinder, findsOneWidget);
+      final refreshButton = tester.widget<IconButton>(refreshFinder);
+      expect(refreshButton.tooltip, equals('Recarregar dades (sinopsi i portada)'));
+
+      // Botó de localitzar a la balda
+      final locateFinder = find.byKey(const Key('locate_on_shelf_button'));
+      expect(locateFinder, findsOneWidget);
+      final locateButton = tester.widget<IconButton>(locateFinder);
+      expect(locateButton.tooltip, equals('Localitzar a la balda'));
+
+      // Botó de préstec
+      final borrowFinder = find.byKey(const Key('borrow_book_button'));
+      expect(borrowFinder, findsOneWidget);
+      final borrowButton = tester.widget<IconButton>(borrowFinder);
+      expect(borrowButton.tooltip, equals('Treure de la balda / Marcar prestat'));
     });
   });
 

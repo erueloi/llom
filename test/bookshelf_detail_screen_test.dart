@@ -120,7 +120,7 @@ void main() {
 
       // Verify title and room info
       expect(find.text('Llibreria de Roure'), findsOneWidget);
-      expect(find.text('Despatx · 3 baldes · 2 llibres'), findsOneWidget);
+      expect(find.text('Despatx · Ampla (80 cm) · 3 baldes · 2 llibres'), findsOneWidget);
 
       // Verify 3 shelves are listed vertically with clean headers and positions
       expect(find.text('Balda 1 · Superior'), findsOneWidget);
@@ -383,6 +383,72 @@ void main() {
 
       expect(mockService.lastClearedShelfIndex, 1);
       expect(find.text('S\'ha buidat la Balda 1.'), findsOneWidget);
+    });
+
+    testWidgets('FilterChip for borrowed books toggles filter and isolates borrowed books', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final mixedBooks = [
+        BookModel(
+          id: 'b1',
+          title: 'Pedra de tartera',
+          author: 'Maria Barbal',
+          shelfCode: 'bc_detail_1-B1',
+          bookcaseId: 'bc_detail_1',
+          positionIndex: 1,
+          isBorrowed: false,
+          createdAt: now,
+        ),
+        BookModel(
+          id: 'b2',
+          title: 'La plaça del Diamant',
+          author: 'Mercè Rodoreda',
+          shelfCode: 'bc_detail_1-B2',
+          bookcaseId: 'bc_detail_1',
+          positionIndex: 1,
+          isBorrowed: true,
+          borrowedTo: 'Miquel',
+          createdAt: now,
+        ),
+      ];
+
+      final mockService = MockBookcaseServiceForDetail(
+        bookcases: [testBookcase],
+        books: mixedBooks,
+      );
+
+      await tester.pumpWidget(createWidget(service: mockService));
+      await tester.pumpAndSettle();
+
+      // Inicialment ambdós llibres són visibles i el xip de filtre mostra el recompte
+      expect(find.text('Pedra de tartera'), findsOneWidget);
+      expect(find.text('La plaça del Diamant'), findsOneWidget);
+      final filterChip = find.byKey(const Key('filter_borrowed_books_chip'));
+      expect(filterChip, findsOneWidget);
+      expect(find.text('Fora de la balda (1)'), findsOneWidget);
+      expect(find.byKey(const Key('bookshelf_actions_fab')), findsOneWidget);
+
+      // Activar el filtre
+      await tester.tap(filterChip);
+      await tester.pumpAndSettle();
+
+      // El llibre no prestat s'ha filtrat; el llibre prestat roman visible
+      expect(find.text('Pedra de tartera'), findsNothing);
+      expect(find.text('La plaça del Diamant'), findsOneWidget);
+      expect(find.text('Cap llibre fora de la balda'), findsWidgets);
+      // El FAB s'amaga quan el filtre està actiu
+      expect(find.byKey(const Key('bookshelf_actions_fab')), findsNothing);
+
+      // Desactivar el filtre
+      await tester.tap(filterChip);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Pedra de tartera'), findsOneWidget);
+      expect(find.text('La plaça del Diamant'), findsOneWidget);
+      expect(find.byKey(const Key('bookshelf_actions_fab')), findsOneWidget);
     });
   });
 }

@@ -127,6 +127,62 @@ void main() {
       expect(updated.synopsis, 'Nova sinopsi');
       expect(updated.coverUrl, 'https://example.com/new.jpg');
     });
+
+    test('borrowed fields serialize, deserialize with backwards compatibility, and copyWith works', () {
+      final borrowedDate = DateTime(2026, 9, 17, 10, 30);
+      final book = BookModel(
+        id: 'b_borrowed',
+        title: 'Tirant lo Blanc',
+        author: 'Joanot Martorell',
+        shelfCode: 'E1-B1',
+        positionIndex: 0,
+        isBorrowed: true,
+        borrowedTo: 'Maria',
+        borrowedAt: borrowedDate,
+        createdAt: now,
+      );
+
+      final map = book.toMap();
+      expect(map['isBorrowed'], isTrue);
+      expect(map['borrowedTo'], 'Maria');
+      expect(map['borrowedAt'], isA<Timestamp>());
+
+      final parsed = BookModel.fromMap(map, 'b_borrowed');
+      expect(parsed.isBorrowed, isTrue);
+      expect(parsed.borrowedTo, 'Maria');
+      expect(parsed.borrowedAt!.millisecondsSinceEpoch ~/ 1000,
+          borrowedDate.millisecondsSinceEpoch ~/ 1000);
+
+      // Compatibilitat retroactiva: document antic de Firestore sense camps de préstec
+      final legacyMap = {
+        'title': 'Llibre antic',
+        'shelfCode': 'E1-B1',
+        'positionIndex': 0,
+        'createdAt': Timestamp.fromDate(now),
+      };
+      final legacyParsed = BookModel.fromMap(legacyMap, 'b_legacy');
+      expect(legacyParsed.isBorrowed, isFalse);
+      expect(legacyParsed.borrowedTo, isNull);
+      expect(legacyParsed.borrowedAt, isNull);
+
+      // copyWith per als camps de préstec
+      final updated = legacyParsed.copyWith(
+        isBorrowed: true,
+        borrowedTo: 'Jordi',
+        borrowedAt: borrowedDate,
+      );
+      expect(updated.isBorrowed, isTrue);
+      expect(updated.borrowedTo, 'Jordi');
+      expect(updated.borrowedAt, borrowedDate);
+
+      // Retornar a la balda via copyWith
+      final returned = updated.copyWith(
+        isBorrowed: false,
+        borrowedTo: null,
+        borrowedAt: null,
+      );
+      expect(returned.isBorrowed, isFalse);
+    });
   });
 
   group('UserModel tests', () {

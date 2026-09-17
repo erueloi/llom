@@ -23,6 +23,7 @@ void main() {
       expect(map['shelfCount'], 5);
       expect(map['bookCount'], 42);
       expect(map['order'], 3);
+      expect(map['widthCm'], 80);
       expect(map['createdAt'], isA<Timestamp>());
 
       final restored = BookcaseModel.fromMap(map, 'bc_1');
@@ -32,7 +33,33 @@ void main() {
       expect(restored.shelfCount, 5);
       expect(restored.bookCount, 42);
       expect(restored.order, 3);
+      expect(restored.widthCm, 80);
       expect(restored.createdAt, now);
+    });
+
+    test('Handles custom widthCm and widthLabel correctly', () {
+      final narrow = BookcaseModel(
+        id: 'bc_narrow',
+        name: 'Columna Estreta',
+        room: 'Passadís',
+        shelfCount: 5,
+        widthCm: 40,
+        createdAt: now,
+      );
+      expect(narrow.widthCm, 40);
+      expect(narrow.widthLabel, 'Estreta (40 cm)');
+
+      final medium = narrow.copyWith(widthCm: 60);
+      expect(medium.widthLabel, 'Mitjana (60 cm)');
+
+      final standard = narrow.copyWith(widthCm: 80);
+      expect(standard.widthLabel, 'Ampla (80 cm)');
+
+      final large = narrow.copyWith(widthCm: 100);
+      expect(large.widthLabel, 'Gran (100 cm)');
+
+      final custom = narrow.copyWith(widthCm: 55);
+      expect(custom.widthLabel, '55 cm');
     });
 
     test('toShelfUnit creates a compatible ShelfUnit with correct mapping', () {
@@ -42,6 +69,7 @@ void main() {
         room: 'Sala d\'Estar',
         shelfCount: 4,
         bookCount: 18,
+        widthCm: 40,
         createdAt: now,
       );
 
@@ -51,6 +79,7 @@ void main() {
       expect(shelfUnit.location, 'Sala d\'Estar');
       expect(shelfUnit.shelfCount, 4);
       expect(shelfUnit.bookCount, 18);
+      expect(shelfUnit.widthCm, 40);
     });
 
     test('copyWith works properly', () {
@@ -60,12 +89,14 @@ void main() {
         room: 'Menjador',
         shelfCount: 3,
         bookCount: 5,
+        widthCm: 80,
         createdAt: now,
       );
 
       final modified = model.copyWith(
         name: 'Modificada',
         shelfCount: 6,
+        widthCm: 40,
       );
 
       expect(modified.id, 'bc_1');
@@ -73,6 +104,7 @@ void main() {
       expect(modified.room, 'Menjador');
       expect(modified.shelfCount, 6);
       expect(modified.bookCount, 5);
+      expect(modified.widthCm, 40);
     });
   });
 }

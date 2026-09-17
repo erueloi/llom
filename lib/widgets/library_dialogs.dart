@@ -787,7 +787,10 @@ Future<void> showDeleteLibraryDialog(BuildContext context, LibraryModel library)
 Future<void> showAddBookcaseDialog(BuildContext context, String libraryId) async {
   final nameController = TextEditingController();
   final roomController = TextEditingController();
+  final customWidthController = TextEditingController();
   int shelfCount = 4;
+  int selectedWidthCm = 80;
+  bool isCustomWidth = false;
   bool isLoading = false;
   String? errorMessage;
 
@@ -811,6 +814,14 @@ Future<void> showAddBookcaseDialog(BuildContext context, String libraryId) async
               return;
             }
 
+            int widthToSave = selectedWidthCm;
+            if (isCustomWidth) {
+              final customParsed = int.tryParse(customWidthController.text.trim());
+              if (customParsed != null && customParsed > 0) {
+                widthToSave = customParsed.clamp(20, 300);
+              }
+            }
+
             setState(() {
               isLoading = true;
               errorMessage = null;
@@ -823,6 +834,7 @@ Future<void> showAddBookcaseDialog(BuildContext context, String libraryId) async
                 room: room.isNotEmpty ? room : 'Menjador',
                 shelfCount: shelfCount,
                 bookCount: 0,
+                widthCm: widthToSave,
                 createdAt: DateTime.now(),
               );
 
@@ -996,6 +1008,20 @@ Future<void> showAddBookcaseDialog(BuildContext context, String libraryId) async
                           ),
                         ],
                       ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Selector d'Amplada del moble
+                    _BookcaseWidthSelector(
+                      selectedWidthCm: selectedWidthCm,
+                      isCustomWidth: isCustomWidth,
+                      customWidthController: customWidthController,
+                      onChanged: (w, isCustom) {
+                        setState(() {
+                          selectedWidthCm = w;
+                          isCustomWidth = isCustom;
+                        });
+                      },
                     ),
 
                     if (errorMessage != null) ...[
@@ -1323,6 +1349,11 @@ Future<void> showEditBookcaseNameDialog(
 }) async {
   final nameController = TextEditingController(text: bookcase.name);
   final roomController = TextEditingController(text: bookcase.room);
+  final customWidthController = TextEditingController(
+    text: ![40, 60, 80, 100].contains(bookcase.widthCm) ? bookcase.widthCm.toString() : '',
+  );
+  int selectedWidthCm = bookcase.widthCm;
+  bool isCustomWidth = ![40, 60, 80, 100].contains(bookcase.widthCm);
   String? errorMessage;
   bool isLoading = false;
 
@@ -1345,6 +1376,14 @@ Future<void> showEditBookcaseNameDialog(
               return;
             }
 
+            int widthToSave = selectedWidthCm;
+            if (isCustomWidth) {
+              final customParsed = int.tryParse(customWidthController.text.trim());
+              if (customParsed != null && customParsed > 0) {
+                widthToSave = customParsed.clamp(20, 300);
+              }
+            }
+
             setState(() {
               isLoading = true;
               errorMessage = null;
@@ -1357,11 +1396,12 @@ Future<void> showEditBookcaseNameDialog(
                 bookcase.id,
                 name: newName,
                 room: newRoom.isNotEmpty ? newRoom : bookcase.room,
+                widthCm: widthToSave,
               );
 
               if (context.mounted) {
                 Navigator.of(sheetContext).pop();
-                AppFeedback.showSuccess(context, 'Nom canviat a "$newName" correctament!');
+                AppFeedback.showSuccess(context, 'Dades de l\'estanteria actualitzades correctament!');
               }
             } catch (e) {
               if (context.mounted) {
@@ -1469,6 +1509,20 @@ Future<void> showEditBookcaseNameDialog(
                         contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                         border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                       ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    // Selector d'Amplada del moble
+                    _BookcaseWidthSelector(
+                      selectedWidthCm: selectedWidthCm,
+                      isCustomWidth: isCustomWidth,
+                      customWidthController: customWidthController,
+                      onChanged: (w, isCustom) {
+                        setState(() {
+                          selectedWidthCm = w;
+                          isCustomWidth = isCustom;
+                        });
+                      },
                     ),
                     if (errorMessage != null) ...[
                       const SizedBox(height: 12),
@@ -1606,4 +1660,91 @@ Future<void> showDeleteBookcaseDialog(
       );
     },
   );
+}
+
+/// Selector visual d'amplada física del moble amb opcions ràpides i mida lliure
+class _BookcaseWidthSelector extends StatelessWidget {
+  final int selectedWidthCm;
+  final bool isCustomWidth;
+  final TextEditingController customWidthController;
+  final void Function(int widthCm, bool isCustom) onChanged;
+
+  const _BookcaseWidthSelector({
+    required this.selectedWidthCm,
+    required this.isCustomWidth,
+    required this.customWidthController,
+    required this.onChanged,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const presets = [
+      (40, '40 cm · Estreta'),
+      (60, '60 cm · Mitjana'),
+      (80, '80 cm · Ampla'),
+      (100, '100 cm · Gran'),
+    ];
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Amplada del moble',
+          style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textMain),
+        ),
+        const SizedBox(height: 8),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            ...presets.map((p) {
+              final isSelected = !isCustomWidth && selectedWidthCm == p.$1;
+              return ChoiceChip(
+                key: Key('width_chip_${p.$1}'),
+                label: Text(p.$2),
+                selected: isSelected,
+                onSelected: (sel) {
+                  if (sel) onChanged(p.$1, false);
+                },
+                selectedColor: AppColors.primary.withAlpha(40),
+                labelStyle: TextStyle(
+                  color: isSelected ? AppColors.primary : AppColors.textMain,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                ),
+              );
+            }),
+            ChoiceChip(
+              key: const Key('width_chip_custom'),
+              label: const Text('Personalitzada...'),
+              selected: isCustomWidth,
+              onSelected: (sel) {
+                if (sel) onChanged(selectedWidthCm, true);
+              },
+              selectedColor: AppColors.primary.withAlpha(40),
+              labelStyle: TextStyle(
+                color: isCustomWidth ? AppColors.primary : AppColors.textMain,
+                fontWeight: isCustomWidth ? FontWeight.bold : FontWeight.normal,
+              ),
+            ),
+          ],
+        ),
+        if (isCustomWidth) ...[
+          const SizedBox(height: 10),
+          TextField(
+            key: const Key('custom_width_field'),
+            controller: customWidthController,
+            keyboardType: TextInputType.number,
+            inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+            decoration: InputDecoration(
+              hintText: 'Ex: 75',
+              suffixText: 'cm',
+              prefixIcon: const Icon(Icons.straighten_rounded, color: AppColors.textMuted),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
 }

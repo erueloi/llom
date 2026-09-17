@@ -38,6 +38,40 @@ void main() {
       await tester.tap(find.byType(BookSpineWidget));
       expect(tapped, isTrue);
     });
+
+    testWidgets('Renders ghost spine and indicator when book is borrowed', (WidgetTester tester) async {
+      final borrowedBook = BookModel(
+        id: 'test-borrowed',
+        title: 'La mort i la primavera',
+        author: 'Mercè Rodoreda',
+        shelfCode: 'E1-B1',
+        positionIndex: 2,
+        isBorrowed: true,
+        borrowedTo: 'Anna',
+        createdAt: DateTime.now(),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Center(
+              child: BookSpineWidget(
+                book: borrowedBook,
+                displayIndex: 2,
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('La mort i la primavera'), findsOneWidget);
+      expect(find.text('#2'), findsOneWidget);
+      expect(find.byKey(const Key('borrowed_book_indicator')), findsOneWidget);
+
+      final tooltip = tester.widget<Tooltip>(find.byType(Tooltip));
+      expect(tooltip.message, 'Fora de la balda: Anna');
+    });
   });
 
   group('ShelfRowWidget tests', () {

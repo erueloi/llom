@@ -386,5 +386,23 @@ class LibraryService {
       );
     }
   }
+
+  /// Afegeix de forma atòmica un nom a la llista de prestataris habituals de la biblioteca
+  Future<void> addFrequentBorrower({
+    required String libraryId,
+    required String borrowerName,
+  }) async {
+    final cleanLibId = libraryId.trim();
+    final cleanName = borrowerName.trim();
+    if (cleanLibId.isEmpty || cleanName.isEmpty) return;
+
+    try {
+      await _firestore.collection('libraries').doc(cleanLibId).update({
+        'frequentBorrowers': FieldValue.arrayUnion([cleanName]),
+      });
+    } catch (_) {
+      // Si falla l'actualització remota de Firestore no bloqueja el flux
+    }
+  }
 }
 

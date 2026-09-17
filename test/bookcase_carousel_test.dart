@@ -43,14 +43,17 @@ void main() {
       );
 
       expect(find.text('Estanteria 1 · Finestra'), findsOneWidget);
-      expect(find.text('4 baldes · 80 llibres'), findsOneWidget);
+      expect(find.text('80 cm · 4 baldes · 80 llibres'), findsOneWidget);
 
       await tester.tap(find.byType(BookcaseCard));
       expect(tapped, isTrue);
 
-      // El moble té llibres, per tant ha de renderitzar la planteta i el llibre inclinat
-      expect(find.byKey(const Key('mini_plant_decoration')), findsOneWidget);
-      expect(find.byKey(const Key('leaning_book_decoration')), findsOneWidget);
+      // Comprova que el moble amb llibres renderitza decoracions artesanals
+      final totalDecorations = find.byKey(const Key('mini_plant_decoration')).evaluate().length +
+          find.byKey(const Key('leaning_book_decoration')).evaluate().length +
+          find.byKey(const Key('stacked_books_decoration')).evaluate().length +
+          find.byKey(const Key('bookend_decoration')).evaluate().length;
+      expect(totalDecorations, greaterThanOrEqualTo(1));
     });
 
     testWidgets('Renders bare wooden shelves with no decorations when bookCount is 0', (WidgetTester tester) async {
@@ -78,11 +81,46 @@ void main() {
       );
 
       expect(find.text('Estanteria Buida'), findsOneWidget);
-      expect(find.text('3 baldes · 0 llibres'), findsOneWidget);
+      expect(find.text('80 cm · 3 baldes · 0 llibres'), findsOneWidget);
 
       // Cap llibre ni detall decoratiu en un moble completament buit
       expect(find.byKey(const Key('mini_plant_decoration')), findsNothing);
       expect(find.byKey(const Key('leaning_book_decoration')), findsNothing);
+      expect(find.byKey(const Key('stacked_books_decoration')), findsNothing);
+      expect(find.byKey(const Key('bookend_decoration')), findsNothing);
+    });
+
+    testWidgets('Renders narrow bookcase (40 cm) with slender proportions', (WidgetTester tester) async {
+      const narrowUnit = ShelfUnit(
+        id: 'u_narrow',
+        name: 'Columna Estreta',
+        location: 'Passadís',
+        shelfCount: 5,
+        bookCount: 25,
+        widthCm: 40,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 400,
+              child: BookcaseCard(
+                unit: narrowUnit,
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Columna Estreta'), findsOneWidget);
+      expect(find.text('40 cm · 5 baldes · 25 llibres'), findsOneWidget);
+
+      // Comprova que utilitza FractionallySizedBox amb el factor harmònic per a mobles estrets
+      final fractionalBox = tester.widget<FractionallySizedBox>(find.byType(FractionallySizedBox).first);
+      expect(fractionalBox.widthFactor, closeTo(0.84, 0.01));
     });
 
     testWidgets('Respects shelfBookCounts with mixed empty and filled shelves', (WidgetTester tester) async {
@@ -111,10 +149,64 @@ void main() {
         ),
       );
 
-      // Balda superior (amb llibres) té la planteta
-      expect(find.byKey(const Key('mini_plant_decoration')), findsOneWidget);
-      // Balda 2 (índex 1) està buida (0 llibres), per tant no hi ha llibre inclinat
-      expect(find.byKey(const Key('leaning_book_decoration')), findsNothing);
+      // Comprova que no hi ha desbordament ni decoracions anòmales
+      final totalDecorations = find.byKey(const Key('mini_plant_decoration')).evaluate().length +
+          find.byKey(const Key('leaning_book_decoration')).evaluate().length +
+          find.byKey(const Key('stacked_books_decoration')).evaluate().length +
+          find.byKey(const Key('bookend_decoration')).evaluate().length;
+      expect(totalDecorations, lessThanOrEqualTo(1));
+    });
+
+    testWidgets('Renders all artisanal decoration varieties across diverse bookcases', (WidgetTester tester) async {
+      // Provem diverses estanteries amb prou llibres per verificar que tots els tipus de decoració poden aparèixer
+      final testUnits = List.generate(
+        15,
+        (i) => ShelfUnit(
+          id: 'unit_$i',
+          name: 'Llibreria Variada $i',
+          location: 'Habitació $i',
+          shelfCount: 5,
+          bookCount: 50,
+        ),
+      );
+
+      final foundDecorations = <String>{};
+
+      for (final u in testUnits) {
+        await tester.pumpWidget(
+          MaterialApp(
+            home: Scaffold(
+              body: SizedBox(
+                width: 300,
+                height: 400,
+                child: BookcaseCard(
+                  unit: u,
+                  onTap: () {},
+                ),
+              ),
+            ),
+          ),
+        );
+
+        if (find.byKey(const Key('mini_plant_decoration')).evaluate().isNotEmpty) {
+          foundDecorations.add('plant');
+        }
+        if (find.byKey(const Key('leaning_book_decoration')).evaluate().isNotEmpty) {
+          foundDecorations.add('leaning');
+        }
+        if (find.byKey(const Key('stacked_books_decoration')).evaluate().isNotEmpty) {
+          foundDecorations.add('stacked');
+        }
+        if (find.byKey(const Key('bookend_decoration')).evaluate().isNotEmpty) {
+          foundDecorations.add('bookend');
+        }
+      }
+
+      // Totes les 4 classes de decoracions han estat renderitzades pel generador determinista
+      expect(foundDecorations.contains('plant'), isTrue);
+      expect(foundDecorations.contains('leaning'), isTrue);
+      expect(foundDecorations.contains('stacked'), isTrue);
+      expect(foundDecorations.contains('bookend'), isTrue);
     });
   });
 

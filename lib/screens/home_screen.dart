@@ -18,6 +18,7 @@ import '../models/user_model.dart';
 import 'profile_screen.dart';
 import 'bookshelf_detail_screen.dart';
 import 'shelf_detail_screen.dart';
+import 'library_stats_screen.dart';
 import '../services/shelf_vision_service.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -385,6 +386,27 @@ class _HomeScreenState extends State<HomeScreen> {
           ],
         ),
         actions: [
+          IconButton(
+            key: const Key('library_stats_button'),
+            tooltip: 'Estadístiques de la biblioteca',
+            icon: const Icon(
+              Icons.insights_rounded,
+              color: AppColors.primary,
+              size: 24,
+            ),
+            onPressed: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => LibraryStatsScreen(
+                    libraryId: activeLibrary?.id,
+                    libraryName: activeLibrary?.name ?? 'La teva biblioteca',
+                    initialBooks: activeLibrary == null ? MockData.mockBooks : null,
+                    bookcaseService: _bookcaseService,
+                  ),
+                ),
+              );
+            },
+          ),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: InkWell(

@@ -885,7 +885,151 @@
   - Ampliat [test/bookcase_carousel_test.dart](file:///c:/git/llom/test/bookcase_carousel_test.dart) (4 tests: verificació de l'aparició de la planteta i llibre inclinat en mobles amb llibres, baldes netes de fusta sense ornaments quan `bookCount == 0`, gestió de baldes mixtes amb `shelfBookCounts: [6, 0, 0]`, i propagació de `shelfBookCountsMap` a través del carrusel).
   - **166 de 166 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
 
+### ✅ Tasca 45: Funcionalitat de Llibre Fora de la Balda / En Préstec (Efecte Llom Fantasma)
+- [x] Ampliació del model de dades [lib/models/book_model.dart](file:///c:/git/llom/lib/models/book_model.dart):
+  - Afegits els camps: `final bool isBorrowed;` (per defecte `false`), `final String? borrowedTo;` i `final DateTime? borrowedAt;`.
+  - Actualitzats el constructor, `copyWith`, `toMap`, `fromMap` (compatibilitat retroactiva garantida: si `isBorrowed` és absent o nul a Firestore, s'assigna `false`), `==`, `hashCode` i `toString`.
+- [x] Mètode de persistència a [lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart):
+  - Implementat `toggleBookBorrowedStatus({required String libraryId, required String bookId, required bool isBorrowed, String? borrowedTo})`: actualitza atòmicament a Firestore `isBorrowed`, `borrowedTo` (amb fallback 'En lectura') i `borrowedAt` (`FieldValue.serverTimestamp()` si es presta, o `null` si es retorna).
+- [x] Representació visual de «Llom Fantasma» a [lib/widgets/book_spine_widget.dart](file:///c:/git/llom/lib/widgets/book_spine_widget.dart):
+  - Si `book.isBorrowed == true`:
+    * Aplica una opacitat reduïda (`0.45`), fons translúcid (`withAlpha(90)`), vora perfilada en taronja/terracota (`AppColors.primary.withAlpha(170)`).
+    * Manté el títol, autor i número d'ordre llegibles sobre el tauló físic de fusta.
+    * Indicador flotant superior (`borrowed_book_indicator`): badge circular taronja (`#E65100`) amb icona `menu_book_rounded` i `Tooltip` informatiu («Fora de la balda: {borrowedTo}»).
+    * Posicionament coordinat amb la fletxa de cerca per evitar solapaments quan el llibre està ressaltat.
+    * Etiqueta semàntica actualitzada per a lectors de pantalla («... fora de la balda, prestat a {borrowedTo}»).
+- [x] Gestió a la fitxa del llibre [lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart):
+  - Si el llibre està fora de la balda:
+    * Banner superior destacat `borrowed_info_banner` en fons taronja suau amb icona `outbox_rounded`, text «Llibre fora de la balda», nom de la persona/lectura i data en què es va agafar (`dd/MM/yyyy`).
+    * Botó verd esmeralda destacat `return_book_button`: «Retornar a la balda» (`Icons.keyboard_return_rounded`), que en prémer-lo crida `toggleBookBorrowedStatus`, actualitza l'estat local a l'instant i mostra feedback d'èxit amb `AppFeedback.showSuccess`.
+  - Si el llibre està a la balda:
+    * Botó secundari `borrow_book_button`: «Marcar com a prestat / llegint» (`Icons.outbox_rounded`), visible per a usuaris amb permís d'edició (`canEdit`).
+    * Diàleg modal centrat d'acció ràpida amb camp de text `borrowed_to_text_field` i xips de suggeriment predefinits («Jo mateix / Llegint», «Familiar», «Amic/ga»).
+- [x] Filtre ràpid a [lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart):
+  - Integrat `FilterChip` (`filter_borrowed_books_chip`) sota la barra de cerca de l'estanteria que mostra el recompte en temps real: «Fora de la balda (${borrowedCount})».
+  - En activar-se, aïlla immediatament els llibres en préstec de totes les baldes físiques del moble, actualitzant els subtítols («N llibres fora de la balda» o «Cap llibre fora de la balda»).
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/models_test.dart](file:///c:/git/llom/test/models_test.dart): Serialització, deserialització retroactiva i `copyWith` dels camps `isBorrowed`, `borrowedTo` i `borrowedAt`.
+  - Actualitzat [test/bookcase_service_test.dart](file:///c:/git/llom/test/bookcase_service_test.dart): Validació de paràmetres buits a `toggleBookBorrowedStatus`.
+  - Actualitzat [test/shelf_detail_test.dart](file:///c:/git/llom/test/shelf_detail_test.dart): Renderització del llom fantasma, indicador flotant i tooltip.
+  - Actualitzat [test/book_detail_bottom_sheet_test.dart](file:///c:/git/llom/test/book_detail_bottom_sheet_test.dart): Obertura del diàleg de préstec, assignació de persona amb xips, canvi d'estat a Firestore, banner informatiu i retorn a la balda.
+  - Actualitzat [test/bookshelf_detail_screen_test.dart](file:///c:/git/llom/test/bookshelf_detail_screen_test.dart): Activació i desactivació del `FilterChip`, filtratge reactiu per balda i amagatall del FAB en mode filtrat.
+  - **172 de 172 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 46: Pantalla d'Estadístiques de la Biblioteca (`LibraryStatsScreen`) i Servei d'Analítica (`LibraryStatsService`)
+- [x] Creació del model i servei de càlcul d'estadístiques a [lib/services/library_stats_service.dart](file:///c:/git/llom/lib/services/library_stats_service.dart):
+  - Model immutable `LibraryStats` amb mètriques agregades: `totalBooks`, `borrowedBooksCount`, `totalPages`, `averagePages`, `averageYear`, `oldestBook`, `longestBook`, `topAuthors`, `booksByDecade` i `enrichedBooksCount`.
+  - Mètode estàtic analític `LibraryStatsService.calculateStats(List<BookModel> books)`:
+    * Recompte total de llibres i llibres en préstec (`isBorrowed == true`).
+    * Càlcul de pàgines totals, mitjana de pàgines i cerca del llibre més voluminós (`longestBook`).
+    * Parseig robust d'anys de publicació (regex de 4 dígits tolerant a formats amb mes/dia), determinació de l'edició més antiga (`oldestBook`), càlcul de l'any mitjà i agrupació històrica per dècades (`<1980`, `1980-1989`, `1990-1999`, `2000-2009`, `2010-2019`, `2020+`).
+    * Classificació i filtratge d'autors (ignorant buits, "Sense autor", "Desconegut", "Anònim"), ordenats descendentment amb selecció del Top 5.
+    * Mètrica de llibres enriquits digitalment amb sinopsi o portada.
+    * Gestió resilient per a col·leccions buides o camps nuls.
+- [x] Disseny i implementació de la pantalla d'UI [lib/screens/library_stats_screen.dart](file:///c:/git/llom/lib/screens/library_stats_screen.dart):
+  - Suport tant per a dades en viu via `StreamBuilder` (biblioteca o estanteria concreta) com per a `initialBooks` (demostració o tests).
+  - Estat buit ergonòmic si la col·lecció no té exemplars («Encara no hi ha estadístiques»).
+  - **Secció 1 (Targetes KPI)**: Graella responsive de 4 targetes amb alt contrast i disseny editorial: Total de llibres, Pàgines totals estimades, Fora de la balda (en préstec/lectura) i Any mitjà d'edició.
+  - **Secció 2 (Top Autors)**: Targeta blanca amb rànquing (#1..#5), nom d'autor en negreta, nombre de títols i barres de progrés proporcionals al màxim.
+  - **Secció 3 (Llibres Singulars)**: Dues targetes destacades: «El veterà» (títol, autor i any de l'edició més antiga) i «El gegant» (títol, autor i nombre total de pàgines).
+  - **Secció 4 (Distribució per Dècades)**: Histograma elegant amb barres horitzontals de proporció i xifres de llibres per dècada.
+  - **Peu informatiu**: Banner subtil d'enriquiment de portades/sinopsis.
+- [x] Punts d'accés i navegació a l'AppBar:
+  - [lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart): Afegit botó `IconButton(key: Key('library_stats_button'), icon: Icon(Icons.insights_rounded))` a l'AppBar principal que obre les estadístiques de tota la biblioteca activa (o dades mock en mode demo).
+  - [lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart): Afegit botó `IconButton(key: Key('bookcase_stats_button'), icon: Icon(Icons.insights_rounded))` que obre les estadístiques específiques de l'estanteria consultada.
+- [x] Suite de tests unitària i de widgets:
+  - Creat [test/library_stats_service_test.dart](file:///c:/git/llom/test/library_stats_service_test.dart): 4 tests comprovant col·lecció buida, pàgines totals, llibre més antic, llibre més llarg, Top Autors i distribució per dècades.
+  - Creat [test/library_stats_screen_test.dart](file:///c:/git/llom/test/library_stats_screen_test.dart): 4 tests verificant estat buit, renderitzat de KPIs i seccions, càrrega reactiva amb StreamBuilder i navegació des de `BookshelfDetailScreen`.
+  - Actualitzat [test/home_screen_actions_test.dart](file:///c:/git/llom/test/home_screen_actions_test.dart): Comprovació de la navegació a `LibraryStatsScreen` des de l'AppBar d'inici.
+  - **181 de 181 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### Tasca 47: Millora del flux de préstec amb xips de membres/freqüents, selector de data/hora i historial de préstecs (LoanRecord)
+- [x] Model de dades `LoanRecord` ([lib/models/loan_record.dart](file:///c:/git/llom/lib/models/loan_record.dart)):
+  - Creat el model immutable amb `id`, `borrowedTo`, `borrowedAt` i `returnedAt?`.
+  - Getter `durationInDays` amb càlcul automàtic de dies tant per a préstecs tancats com per a préstecs actius (`DateTime.now()`).
+  - Mètodes `toMap()`, `fromMap()` resilient a `Timestamp`/`DateTime`/`String`/`int`, `copyWith()`, `==`, `hashCode` i `toString()`.
+- [x] Ampliació de models existents:
+  - [lib/models/book_model.dart](file:///c:/git/llom/lib/models/book_model.dart): Afegit el camp `final List<LoanRecord> loanHistory;` amb valor per defecte `const []` garantint compatibilitat retroactiva total a Firestore i tests existents.
+  - [lib/models/library_model.dart](file:///c:/git/llom/lib/models/library_model.dart): Afegit el camp `final List<String> frequentBorrowers;` per memoritzar els contactes habituals de préstec de cada biblioteca.
+- [x] Serveis de persistència:
+  - [lib/services/library_service.dart](file:///c:/git/llom/lib/services/library_service.dart): Afegit el mètode `addFrequentBorrower({required String libraryId, required String borrowerName})` amb actualització atòmica a Firestore via `FieldValue.arrayUnion([borrowerName])`.
+  - [lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart):
+    - Actualitzat `toggleBookBorrowedStatus` amb el paràmetre opcional `DateTime? borrowedAt`.
+    - En marcar com a prestat (`isBorrowed: true`), afegeix un nou `LoanRecord` actiu (`returnedAt: null`) a l'historial del document.
+    - En retornar a la balda (`isBorrowed: false`), cerca l'últim `LoanRecord` actiu, li assigna `returnedAt = DateTime.now()` i neteja els camps de préstec actiu.
+- [x] Interfície d'usuari i diàlegs a [lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart):
+  - **Modal de préstec `_BorrowBookDialog`**:
+    - Xips de suggeriments (`ActionChip`) amb el nom de l'usuari actual, opcions estàndards («Jo mateix / Llegint», «Familiar», «Amic/ga») i tots els contactes habituals de `frequentBorrowers`.
+    - Selector interactiu de data i hora amb `showDatePicker` i `showTimePicker` formatat ergonòmicament («dd/MM/yyyy · hh:mm»).
+    - Enregistrament automàtic i atòmic de nous prestataris a `frequentBorrowers`.
+  - **Visualitzador d'historial `_LoanHistoryBottomSheet`**:
+    - Botó destacat `loan_history_button`: «Historial de préstecs (N)» amb icona `Icons.history_rounded` visible quan hi ha registre.
+    - Llistat cronològic invers dels préstecs: nom del lector, rang de dates formatat, durada del préstec en dies (o «En curs (X dies)») i codificació visual per colors (actiu en taronja vs finalitzat en verd).
+- [x] Suite de tests i verificacions:
+  - Creat [test/borrow_history_test.dart](file:///c:/git/llom/test/borrow_history_test.dart): 12 tests verificant el model `LoanRecord`, serialització a `BookModel` i `LibraryModel`, validacions de `BookcaseService`, renderitzat de xips de suggeriment, canvi automàtic de text, i obertura del calendari i de l'historial.
+  - Actualitzat [test/book_detail_bottom_sheet_test.dart](file:///c:/git/llom/test/book_detail_bottom_sheet_test.dart) per mantenir compatibilitat amb la signatura ampliada de `toggleBookBorrowedStatus`.
+  - **193 de 193 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 48: Redisseny compacte de la BottomSheet de llibre (icones d'acció a la capçalera amb tooltips i refresc de dades)
+- [x] Optimització d'espai a [lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart):
+  - Retirats els botons amples inferiors («Localitzar a la balda» i «Marcar com a prestat / llegint») que omplien tota l'alçada de la modal.
+  - Implementada una capçalera superior moderna mitjançant `Stack` amb la nansa centrada i una barra d'icones compactes a la dreta amb `Tooltip`s explicatius en català:
+    * 🔄 **Recarregar dades**: `IconButton(key: Key('refresh_enrichment_button'), tooltip: 'Recarregar dades (sinopsi i portada)')` amb indicador de càrrega circular suau mentre s'executa.
+    * 🎯 **Localitzar a la balda**: `IconButton(key: Key('locate_on_shelf_button'), tooltip: 'Localitzar a la balda')`.
+    * 📤 / 📥 **Treure de la balda / Retornar**: `IconButton(key: Key('borrow_book_button') / Key('return_book_button'), tooltip: 'Treure de la balda / Marcar prestat' o 'Retornar a la balda')`.
+- [x] Lògica de refresc forçat a [lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart):
+  - Afegit el paràmetre `bool force = false` a `enrichAndPersistBook`.
+  - Si `force == true`, invalida la memòria cau interna de títol/autor, consulta novament les APIs de Google Books i Open Library, actualitza les dades a Firestore i notifica `AppFeedback` amb el resultat.
+- [x] Suite de tests i verificacions:
+  - Actualitzat [test/book_detail_bottom_sheet_test.dart](file:///c:/git/llom/test/book_detail_bottom_sheet_test.dart) verificant la presència de les noves icones i el contingut exacte dels 3 `Tooltip`s.
+  - **194 de 194 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 49: Decoracions artesanals dinàmiques i aleatòries a les baldes de les estanteries (`BookcaseCard`)
+- [x] Catàleg ric de decoracions orgàniques a [lib/widgets/bookcase_card.dart](file:///c:/git/llom/lib/widgets/bookcase_card.dart):
+  * **Test amb suculenta** (`_buildMiniPlant`, clau `mini_plant_decoration`).
+  * **Llibre inclinat a la dreta** (`_buildLeaningBook(leanRight: true)`, angle +0.20 rad, clau `leaning_book_decoration`).
+  * **Llibre inclinat a l'esquerra** (`_buildLeaningBook(leanRight: false)`, angle -0.20 rad, clau `leaning_book_decoration`).
+  * **Llibres apilats en horitzontal** (`_buildStackedBooks`, dos volums plans superposats amb colors editorials càlids, clau `stacked_books_decoration`).
+  * **Subjectallibres metàl·lic / bronze** (`_buildBookend`, cantonera/esquadra amb reforç triangular dibuixat via `CustomPainter`, clau `bookend_decoration`).
+  * **Balda neta** (`_ShelfDecorationType.none`, ~28.5% de les baldes amb prou llibres es mantenen netes amb lloms rectes).
+- [x] Distribució pseudoaleatòria determinista i posicions lliures:
+  * Generador de llavor resilient i uniforme amb mesclador de 32 bits tipus Murmur3 basat en l'ID del moble, el nom i l'índex de la balda (garanteix absència de parpelleigs o canvis sobtats durant l'scroll o rebuilds de Flutter).
+  * Condició d'activació: només es mostren ornaments a baldes amb llibres suficients (`bookSpinesCount >= 4`). Les baldes buides o amb molt pocs llibres queden netes amb el tauló de fusta.
+  * Posicionament variable: les decoracions poden aparèixer a l'inici (`start`), entremig dividint els lloms en dos blocs orgànics (`middle`) o a l'extrem dret (`end`).
+- [x] Suite de tests i verificacions a [test/bookcase_carousel_test.dart](file:///c:/git/llom/test/bookcase_carousel_test.dart):
+  * Verificació de mobles buits (cap ornament present).
+  * Verificació de baldes mixtes buides vs plenes.
+  * Test exhaustiu de varietat verificant que totes les classes de decoracions artesanals apareixen de manera determinista i que cap genera desbordaments d'UI.
+  * **195 de 195 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 50: Suport d'amplades reals d'estanteria (mides predefinides + mida lliure) i renderització proporcional a la pantalla principal i detall
+- [x] Ampliació de models de dades:
+  * Camp `final int widthCm;` (per defecte 80 cm) a `ShelfUnit` ([lib/models/shelf_unit_model.dart](file:///c:/git/llom/lib/models/shelf_unit_model.dart)) i `BookcaseModel` ([lib/models/bookcase_model.dart](file:///c:/git/llom/lib/models/bookcase_model.dart)).
+  * Serialització i deserialització a Firestore amb fallback automàtic transparent a 80 cm per a documents existents (`toMap` i `fromMap`).
+  * Getter `widthLabel` amb nomenclatura editorial clara: `Estreta (40 cm)`, `Mitjana (60 cm)`, `Ampla (80 cm)`, `Gran (100 cm)`, o `${widthCm} cm` per a mides a mida.
+  * Suport de `widthCm` a `copyWith`, `toShelfUnit`, comparadors `==`, `hashCode` i `toString`.
+- [x] Servei d'estanteries (`BookcaseService`):
+  * Mètode `updateBookcase` a [lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart) actualitzat per persistir `widthCm` i `shelfCount` de manera atòmica.
+- [x] Selector d'amplada visual a formularis modals ([lib/widgets/library_dialogs.dart](file:///c:/git/llom/lib/widgets/library_dialogs.dart)):
+  * Component privat `_BookcaseWidthSelector` amb 4 mides predefinides (40 cm · Estreta, 60 cm · Mitjana, 80 cm · Ampla, 100 cm · Gran) i opció de mida personalitzada amb camp numèric directe en cm (amb validació i limitació entre 20 i 300 cm).
+  * Integració del selector a la creació de mobles (`showAddBookcaseDialog`) i a l'edició de dades del moble (`showEditBookcaseNameDialog`).
+- [x] Renderització visual proporcional i compacta a la pantalla principal ([lib/widgets/bookcase_card.dart](file:///c:/git/llom/lib/widgets/bookcase_card.dart) i [lib/widgets/bookcase_carousel.dart](file:///c:/git/llom/lib/widgets/bookcase_carousel.dart)):
+  * Calibració harmònica del `widthFactor`: `(0.68 + (unit.widthCm / 80.0) * 0.32).clamp(0.82, 1.0)`. Una columna de 40 cm és visiblement un 16% més esvelta (proporció orgànica estil Billy) sense deixar forats excessius.
+  * Ajust intel·ligent de proximitat (`Transform.translate`): quan el moble central és estret (<80 cm) o en pantalles panoràmiques, els mobles adjacents es desplacen suaument cap al centre compensant l'espai buit restant (`emptyCenterHalfFraction * slotWidth + 16px`), aconseguint una separació natural i contínua de paret de biblioteca sense buits blancs.
+  * Fraccions de `viewportFraction` optimitzades per plataforma: `0.74` a mòbils, `0.48` a tauletes i `0.40` a web/escriptori ample (evitant targetes sobredimensionades de més de 500px).
+  * Escalat suau lateral (de 1.0 a 0.88 en lloc de 0.85) i opacitat (1.0 a 0.60) per mantenir les estanteries veïnes ben integrades visualment.
+  * Capacitat dinàmica de lloms per balda segons l'amplada física (`((unit.widthCm / 80.0) * 12).round().clamp(6, 16)`), representant amb precisió que un moble estret s'omple amb menys exemplars.
+  * Etiqueta d'amplada visible a la barra inferior de metadades del moble (`${unit.widthCm} cm · ${unit.shelfCount} baldes · ${unit.bookCount} llibres`).
+- [x] Adaptació ergonòmica a la pantalla de detall ([lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart)):
+  * Preserva l'amplada completa en dispositius mòbils per garantir una experiència de lectura de lloms gran, nítida i accessible.
+  * Subtítol de l'AppBar amb informació d'amplada (`${currentBookcase.widthLabel}`).
+  * Embolcall de centrat amb `LayoutBuilder` i contenció subtil de `maxWidth` en tauletes o pantalles grans (620px per a mobles estrets <= 50cm vs 850px estàndard).
+- [x] Suite de tests i verificacions:
+  * Actualitzats i ampliats [test/bookcase_test.dart](file:///c:/git/llom/test/bookcase_test.dart), [test/bookcase_carousel_test.dart](file:///c:/git/llom/test/bookcase_carousel_test.dart), [test/bookshelf_detail_screen_test.dart](file:///c:/git/llom/test/bookshelf_detail_screen_test.dart) i [test/home_screen_actions_test.dart](file:///c:/git/llom/test/home_screen_actions_test.dart).
+  * **197 de 197 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
 ---
 
 ## 🚀 Propers Passos
 *(S'aniran afegint a mesura que es defineixin noves tasques)*
+

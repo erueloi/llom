@@ -6,6 +6,7 @@ class ShelfUnit {
   final String location;
   final int shelfCount;
   final int bookCount;
+  final int widthCm;
   final IconData icon;
 
   const ShelfUnit({
@@ -14,6 +15,7 @@ class ShelfUnit {
     this.location = '',
     required this.shelfCount,
     required this.bookCount,
+    this.widthCm = 80,
     this.icon = Icons.shelves,
   });
 
@@ -24,6 +26,7 @@ class ShelfUnit {
     String? location,
     int? shelfCount,
     int? bookCount,
+    int? widthCm,
     IconData? icon,
   }) {
     return ShelfUnit(
@@ -32,6 +35,7 @@ class ShelfUnit {
       location: location ?? this.location,
       shelfCount: shelfCount ?? this.shelfCount,
       bookCount: bookCount ?? this.bookCount,
+      widthCm: widthCm ?? this.widthCm,
       icon: icon ?? this.icon,
     );
   }

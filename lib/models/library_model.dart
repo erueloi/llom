@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/foundation.dart';
 
 /// Rols possibles per als membres d'una biblioteca
 enum Role {
@@ -41,6 +42,7 @@ class LibraryModel {
   final String inviteCode;
   final Map<String, String> members;
   final List<String> memberUids;
+  final List<String> frequentBorrowers;
   final DateTime createdAt;
 
   const LibraryModel({
@@ -50,6 +52,7 @@ class LibraryModel {
     required this.inviteCode,
     required this.members,
     required this.memberUids,
+    this.frequentBorrowers = const [],
     required this.createdAt,
   });
 
@@ -74,6 +77,7 @@ class LibraryModel {
       'inviteCode': inviteCode,
       'members': members,
       'memberUids': memberUids,
+      'frequentBorrowers': frequentBorrowers,
       'createdAt': Timestamp.fromDate(createdAt),
     };
   }
@@ -107,6 +111,16 @@ class LibraryModel {
       }
     }
 
+    final rawFrequent = map['frequentBorrowers'];
+    final List<String> parsedFrequent = [];
+    if (rawFrequent is List) {
+      for (final item in rawFrequent) {
+        if (item != null && item.toString().trim().isNotEmpty) {
+          parsedFrequent.add(item.toString().trim());
+        }
+      }
+    }
+
     return LibraryModel(
       id: id ?? map['id'] as String? ?? '',
       name: map['name'] as String? ?? '',
@@ -114,6 +128,7 @@ class LibraryModel {
       inviteCode: map['inviteCode'] as String? ?? '',
       members: parsedMembers,
       memberUids: parsedMemberUids,
+      frequentBorrowers: parsedFrequent,
       createdAt: _parseDateTime(map['createdAt']),
     );
   }
@@ -126,6 +141,7 @@ class LibraryModel {
     String? inviteCode,
     Map<String, String>? members,
     List<String>? memberUids,
+    List<String>? frequentBorrowers,
     DateTime? createdAt,
   }) {
     return LibraryModel(
@@ -135,6 +151,7 @@ class LibraryModel {
       inviteCode: inviteCode ?? this.inviteCode,
       members: members ?? Map<String, String>.from(this.members),
       memberUids: memberUids ?? List<String>.from(this.memberUids),
+      frequentBorrowers: frequentBorrowers ?? List<String>.from(this.frequentBorrowers),
       createdAt: createdAt ?? this.createdAt,
     );
   }
@@ -179,7 +196,7 @@ class LibraryModel {
       }
     }
 
-    return true;
+    return listEquals(frequentBorrowers, other.frequentBorrowers);
   }
 
   @override
@@ -190,10 +207,11 @@ class LibraryModel {
       inviteCode.hashCode ^
       members.length.hashCode ^
       memberUids.length.hashCode ^
+      frequentBorrowers.length.hashCode ^
       createdAt.hashCode;
 
   @override
   String toString() {
-    return 'LibraryModel(id: $id, name: $name, ownerId: $ownerId, inviteCode: $inviteCode, members: $members, memberUids: $memberUids, createdAt: $createdAt)';
+    return 'LibraryModel(id: $id, name: $name, ownerId: $ownerId, inviteCode: $inviteCode, members: $members, memberUids: $memberUids, frequentBorrowers: $frequentBorrowers, createdAt: $createdAt)';
   }
 }

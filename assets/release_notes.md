@@ -1,5 +1,13 @@
 # Release Notes
 
+## v1.2.1+6
+- Nova pantalla d'Estadístiques de la Biblioteca (LibraryStatsScreen) amb mètriques totals, rànquing d'autors i distribució per dècades.
+- Sistema de préstecs ampliat amb xips de contactes habituals, selector de dates i historial complet de préstecs anteriors (LoanRecord).
+- Capçalera de la fitxa del llibre amb icones ràpides amb tooltips i botó de refresc forçat de sinopsi i portada des de Google Books i Open Library.
+- Catàleg de decoracions artesanals dinàmiques i aleatòries a les baldes (suculenta en test de terracota, llibres inclinats, piles horitzontals i subjectallibres de bronze).
+- Suport per a amplades reals d'estanteries en cm (mides predefinides de 40, 60, 80 i 100 cm més mida lliure personalitzada).
+- Visualització proporcional i carrusel compacte amb proximitat dinàmica que elimina buits excessius entre mobles de diferent amplada.
+- Suite de tests unitària i de widgets ampliada a 197 tests (100% d'èxit) i 0 advertències a flutter analyze.
 ## v1.2.0+5
 - Reordenació interactiva de llibres a la balda (Drag & Drop) amb persistència atòmica a Cloud Firestore.
 - Eina de dibuix i marcatge manual de caixes sobre la fotografia de la balda per afegir llibres no detectats.
@@ -38,6 +46,7 @@ Primera release de Llom amb identificació de baldes, disseny accessible i despl
 - Autenticació accessible amb Google Sign-In i correu/contrasenya.
 - Gestió multi-biblioteca amb rols (Propietari, Editor, Lector) i codis d'invitació.
 - Disseny adaptat a accessibilitat sènior amb mode de text extra gran.
+
 
 
 

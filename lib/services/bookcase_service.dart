@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import '../models/book_model.dart';
 import '../models/bookcase_model.dart';
 import '../models/detected_book_spine.dart';
+import '../models/loan_record.dart';
 
 /// Servei per gestionar les estanteries / mobles i llibres sota Cloud Firestore
 class BookcaseService {
@@ -77,12 +78,14 @@ class BookcaseService {
     return toSave;
   }
 
-  /// Actualitza les dades d'un moble d'estanteria (nom i habitació opcional)
+  /// Actualitza les dades d'un moble d'estanteria (nom, habitació, amplada i baldes opcionals)
   Future<void> updateBookcase(
     String libraryId,
     String bookcaseId, {
     required String name,
     String? room,
+    int? widthCm,
+    int? shelfCount,
   }) async {
     final cleanLibId = libraryId.trim();
     final cleanBookcaseId = bookcaseId.trim();
@@ -103,6 +106,8 @@ class BookcaseService {
     final updates = <String, dynamic>{
       'name': cleanName,
       if (room != null && room.trim().isNotEmpty) 'room': room.trim(),
+      if (widthCm != null && widthCm > 0) 'widthCm': widthCm,
+      if (shelfCount != null && shelfCount > 0) 'shelfCount': shelfCount,
     };
 
     await collection.doc(cleanBookcaseId).update(updates);
@@ -307,6 +312,91 @@ class BookcaseService {
 
     await batch.commit();
     return book;
+  }
+
+  /// Actualitza l'estat de préstec d'un llibre (prestat o retornat a la balda) i gestiona el seu historial de préstecs
+  Future<void> toggleBookBorrowedStatus({
+    required String libraryId,
+    required String bookId,
+    required bool isBorrowed,
+    String? borrowedTo,
+    DateTime? borrowedAt,
+  }) async {
+    final cleanLibId = libraryId.trim();
+    final cleanBookId = bookId.trim();
+
+    if (cleanLibId.isEmpty || cleanBookId.isEmpty) {
+      throw ArgumentError('libraryId i bookId són obligatoris');
+    }
+
+    final booksColl = _booksRef(cleanLibId);
+    if (booksColl == null || _firestore == null) {
+      throw StateError('FirebaseFirestore no està disponible');
+    }
+
+    final docRef = booksColl.doc(cleanBookId);
+    final bookSnapshot = await docRef.get();
+    final bookData = bookSnapshot.data();
+
+    final rawHistory = (bookData?['loanHistory'] as List<dynamic>?) ?? [];
+    final List<Map<String, dynamic>> history = rawHistory
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+
+    if (isBorrowed) {
+      final effectiveBorrowedAt = borrowedAt ?? DateTime.now();
+      final effectiveBorrowedTo =
+          (borrowedTo != null && borrowedTo.trim().isNotEmpty)
+              ? borrowedTo.trim()
+              : 'En lectura';
+
+      final recordId =
+          '${DateTime.now().millisecondsSinceEpoch}_${history.length + 1}';
+      final newRecord = LoanRecord(
+        id: recordId,
+        borrowedTo: effectiveBorrowedTo,
+        borrowedAt: effectiveBorrowedAt,
+        returnedAt: null,
+      );
+
+      history.add(newRecord.toMap());
+
+      await docRef.update({
+        'isBorrowed': true,
+        'borrowedTo': effectiveBorrowedTo,
+        'borrowedAt': Timestamp.fromDate(effectiveBorrowedAt),
+        'loanHistory': history,
+      });
+    } else {
+      final now = DateTime.now();
+      final activeIndex = history.lastIndexWhere((r) => r['returnedAt'] == null);
+      if (activeIndex != -1) {
+        history[activeIndex]['returnedAt'] = Timestamp.fromDate(now);
+      } else if (bookData?['isBorrowed'] == true) {
+        // Fallback si no hi havia registre obert previ
+        final prevBorrowedTo =
+            bookData?['borrowedTo'] as String? ?? 'En lectura';
+        final prevBorrowedAt = bookData?['borrowedAt'] != null
+            ? (bookData!['borrowedAt'] is Timestamp
+                ? (bookData['borrowedAt'] as Timestamp).toDate()
+                : DateTime.tryParse(bookData['borrowedAt'].toString()) ?? now)
+            : now;
+
+        history.add(LoanRecord(
+          id: '${now.millisecondsSinceEpoch}',
+          borrowedTo: prevBorrowedTo,
+          borrowedAt: prevBorrowedAt,
+          returnedAt: now,
+        ).toMap());
+      }
+
+      await docRef.update({
+        'isBorrowed': false,
+        'borrowedTo': null,
+        'borrowedAt': null,
+        'loanHistory': history,
+      });
+    }
   }
 
   /// Consulta els llibres d'una balda específica d'un moble

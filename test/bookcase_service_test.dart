@@ -133,5 +133,40 @@ void main() {
         throwsArgumentError,
       );
     });
+
+    test('toggleBookBorrowedStatus validates libraryId and bookId', () async {
+      expect(
+        () => service.toggleBookBorrowedStatus(
+          libraryId: '',
+          bookId: 'b_1',
+          isBorrowed: true,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => service.toggleBookBorrowedStatus(
+          libraryId: '   ',
+          bookId: 'b_1',
+          isBorrowed: true,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => service.toggleBookBorrowedStatus(
+          libraryId: 'lib_1',
+          bookId: '',
+          isBorrowed: true,
+        ),
+        throwsArgumentError,
+      );
+      expect(
+        () => service.toggleBookBorrowedStatus(
+          libraryId: 'lib_1',
+          bookId: '   ',
+          isBorrowed: true,
+        ),
+        throwsArgumentError,
+      );
+    });
   });
 }

@@ -16,6 +16,7 @@ import '../services/shelf_vision_service.dart';
 import '../services/book_enrichment_service.dart';
 import '../widgets/book_detail_bottom_sheet.dart';
 import 'shelf_review_screen.dart';
+import 'library_stats_screen.dart';
 
 /// Pantalla de detall d'un moble d'estanteria amb les seves baldes llistades verticalment
 class BookshelfDetailScreen extends StatefulWidget {
@@ -50,6 +51,7 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
   String _searchQuery = '';
   String? _highlightBookId;
   final Map<int, List<BookModel>> _shelfBooksOverride = {};
+  bool _onlyBorrowedFilter = false;
 
   void _onReorderShelfBooks(
     int shelfNumber,
@@ -692,7 +694,7 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     Text(
-                      '${currentBookcase.room} · ${currentBookcase.shelfCount} baldes · ${allBooks.length} llibres',
+                      '${currentBookcase.room} · ${currentBookcase.widthLabel} · ${currentBookcase.shelfCount} baldes · ${allBooks.length} llibres',
                       style: const TextStyle(
                         fontSize: 13,
                         color: AppColors.textMuted,
@@ -701,16 +703,44 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                     ),
                   ],
                 ),
+                actions: [
+                  IconButton(
+                    key: const Key('bookcase_stats_button'),
+                    tooltip: 'Estadístiques d\'aquesta estanteria',
+                    icon: const Icon(Icons.insights_rounded, color: AppColors.primary, size: 24),
+                    onPressed: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => LibraryStatsScreen(
+                            libraryId: widget.libraryId,
+                            bookcaseId: currentBookcase.id,
+                            bookcaseName: currentBookcase.name,
+                            initialBooks: allBooks,
+                            bookcaseService: _bookcaseService,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                ],
               ),
               body: LayoutBuilder(
                 builder: (context, constraints) {
+                  // Contenció subtil per a tauletes i web segons l'amplada física del moble
+                  final maxWidth = currentBookcase.widthCm <= 50
+                      ? 620.0
+                      : (currentBookcase.widthCm <= 70 ? 720.0 : 850.0);
+
                   return Center(
                     child: ConstrainedBox(
-                      constraints: const BoxConstraints(maxWidth: 850),
+                      constraints: BoxConstraints(maxWidth: maxWidth),
                       child: ListView(
                         padding: const EdgeInsets.fromLTRB(16, 12, 16, 90),
                         children: [
-                          _buildBookcaseSearchBar(),
+                          _buildBookcaseSearchBar(
+                            borrowedCount: allBooks.where((b) => b.isBorrowed).length,
+                          ),
                           const SizedBox(height: 16),
                           for (int index = 0; index < currentBookcase.shelfCount; index++) ...[
                             () {
@@ -736,6 +766,10 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                                 shelfBooks = serverBooks;
                               }
 
+                              if (_onlyBorrowedFilter) {
+                                shelfBooks = shelfBooks.where((b) => b.isBorrowed).toList();
+                              }
+
                               return _buildShelfSection(
                                 shelfNumber: shelfNum,
                                 books: shelfBooks,
@@ -750,7 +784,7 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                   );
                 },
               ),
-              floatingActionButton: (canEdit && _searchQuery.isEmpty)
+              floatingActionButton: (canEdit && _searchQuery.isEmpty && !_onlyBorrowedFilter)
                   ? FloatingActionButton.extended(
                       key: const Key('bookshelf_actions_fab'),
                       onPressed: () => _showAddActionsSheet(context, currentBookcase),
@@ -775,68 +809,111 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
     );
   }
 
-  Widget _buildBookcaseSearchBar() {
-    return Container(
-      decoration: BoxDecoration(
-        color: AppColors.surface,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(
-          color: AppColors.accent,
-          width: 1.2,
+  Widget _buildBookcaseSearchBar({int borrowedCount = 0}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          decoration: BoxDecoration(
+            color: AppColors.surface,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(
+              color: AppColors.accent,
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppColors.primary.withAlpha(15),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: TextField(
+            controller: _searchController,
+            style: const TextStyle(
+              color: AppColors.textMain,
+              fontSize: 16,
+              fontWeight: FontWeight.w500,
+            ),
+            decoration: InputDecoration(
+              hintText: 'Cerca un llibre en aquesta estanteria...',
+              hintStyle: TextStyle(
+                color: AppColors.textMuted.withAlpha(180),
+                fontSize: 15,
+              ),
+              prefixIcon: const Icon(
+                Icons.search_rounded,
+                color: AppColors.primary,
+                size: 24,
+              ),
+              suffixIcon: _searchQuery.isNotEmpty
+                  ? IconButton(
+                      icon: const Icon(
+                        Icons.cancel_rounded,
+                        color: AppColors.textMuted,
+                        size: 22,
+                      ),
+                      onPressed: () {
+                        _searchController.clear();
+                        if (_highlightBookId != null) {
+                          setState(() {
+                            _highlightBookId = null;
+                          });
+                        }
+                      },
+                    )
+                  : null,
+              border: InputBorder.none,
+              enabledBorder: InputBorder.none,
+              focusedBorder: InputBorder.none,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+                vertical: 14,
+              ),
+              filled: false,
+            ),
+          ),
         ),
-        boxShadow: [
-          BoxShadow(
-            color: AppColors.primary.withAlpha(15),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
+        if (borrowedCount > 0 || _onlyBorrowedFilter) ...[
+          const SizedBox(height: 10),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4),
+            child: FilterChip(
+              key: const Key('filter_borrowed_books_chip'),
+              selected: _onlyBorrowedFilter,
+              avatar: Icon(
+                _onlyBorrowedFilter ? Icons.bookmark_remove_rounded : Icons.bookmark_border_rounded,
+                size: 18,
+                color: _onlyBorrowedFilter ? AppColors.primary : AppColors.textMuted,
+              ),
+              label: Text(
+                'Fora de la balda ($borrowedCount)',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: _onlyBorrowedFilter ? FontWeight.w700 : FontWeight.w500,
+                  color: _onlyBorrowedFilter ? AppColors.primary : AppColors.textMain,
+                ),
+              ),
+              backgroundColor: AppColors.surface,
+              selectedColor: AppColors.primary.withAlpha(30),
+              checkmarkColor: AppColors.primary,
+              side: BorderSide(
+                color: _onlyBorrowedFilter ? AppColors.primary : AppColors.accent,
+                width: _onlyBorrowedFilter ? 1.5 : 1.0,
+              ),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20),
+              ),
+              onSelected: (selected) {
+                setState(() {
+                  _onlyBorrowedFilter = selected;
+                });
+              },
+            ),
           ),
         ],
-      ),
-      child: TextField(
-        controller: _searchController,
-        style: const TextStyle(
-          color: AppColors.textMain,
-          fontSize: 16,
-          fontWeight: FontWeight.w500,
-        ),
-        decoration: InputDecoration(
-          hintText: 'Cerca un llibre en aquesta estanteria...',
-          hintStyle: TextStyle(
-            color: AppColors.textMuted.withAlpha(180),
-            fontSize: 15,
-          ),
-          prefixIcon: const Icon(
-            Icons.search_rounded,
-            color: AppColors.primary,
-            size: 24,
-          ),
-          suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(
-                  icon: const Icon(
-                    Icons.cancel_rounded,
-                    color: AppColors.textMuted,
-                    size: 22,
-                  ),
-                  onPressed: () {
-                    _searchController.clear();
-                    if (_highlightBookId != null) {
-                      setState(() {
-                        _highlightBookId = null;
-                      });
-                    }
-                  },
-                )
-              : null,
-          border: InputBorder.none,
-          enabledBorder: InputBorder.none,
-          focusedBorder: InputBorder.none,
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
-            vertical: 14,
-          ),
-          filled: false,
-        ),
-      ),
+      ],
     );
   }
 
@@ -854,9 +931,16 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
     required BookcaseModel currentBookcase,
   }) {
     final positionLabel = _getShelfPositionLabel(shelfNumber, currentBookcase.shelfCount);
-    final subtitleText = books.isEmpty
-        ? '0 llibres'
-        : '${books.length} ${books.length == 1 ? 'llibre' : 'llibres'}';
+    final String subtitleText;
+    if (_onlyBorrowedFilter) {
+      subtitleText = books.isEmpty
+          ? 'Cap llibre fora de la balda'
+          : '${books.length} ${books.length == 1 ? 'llibre fora de la balda' : 'llibres fora de la balda'}';
+    } else {
+      subtitleText = books.isEmpty
+          ? '0 llibres'
+          : '${books.length} ${books.length == 1 ? 'llibre' : 'llibres'}';
+    }
     final shelfPhotoUrl = books.cast<BookModel?>().firstWhere(
       (b) => b?.photoUrl != null && b!.photoUrl!.isNotEmpty,
       orElse: () => null,
@@ -1011,7 +1095,7 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                       return ReorderableDelayedDragStartListener(
                         key: ValueKey(book.id),
                         index: bIdx,
-                        enabled: canEdit && _searchQuery.isEmpty,
+                        enabled: canEdit && _searchQuery.isEmpty && !_onlyBorrowedFilter,
                         child: Align(
                           alignment: Alignment.bottomCenter,
                           child: Padding(
@@ -1035,60 +1119,76 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                       );
                     },
                   )
-                : Align(
-                    alignment: Alignment.bottomLeft,
-                    child: Padding(
-                      padding: const EdgeInsets.only(left: 6),
-                      child: InkWell(
-                        key: Key('ghost_spine_$shelfNumber'),
-                        onTap: () {
-                          _showEmptyShelfOptionsSheet(currentBookcase, shelfNumber);
-                        },
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                        child: Container(
-                          width: 46,
-                          height: 160,
-                          decoration: BoxDecoration(
-                            color: AppColors.canvas.withAlpha(120),
-                            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
-                            border: Border.all(
-                              color: AppColors.primary.withAlpha(130),
-                              width: 1.5,
+                : (_onlyBorrowedFilter
+                    ? Align(
+                        alignment: Alignment.bottomLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 12, bottom: 16),
+                          child: Text(
+                            'Cap llibre fora de la balda',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textMuted.withAlpha(160),
+                              fontStyle: FontStyle.italic,
                             ),
                           ),
-                          child: Stack(
-                            alignment: Alignment.center,
-                            children: [
-                              const Positioned(
-                                top: 12,
-                                child: Icon(Icons.add_rounded, color: AppColors.primary, size: 22),
+                        ),
+                      )
+                    : Align(
+                        alignment: Alignment.bottomLeft,
+                        child: Padding(
+                          padding: const EdgeInsets.only(left: 6),
+                          child: InkWell(
+                            key: Key('ghost_spine_$shelfNumber'),
+                            onTap: () {
+                              _showEmptyShelfOptionsSheet(currentBookcase, shelfNumber);
+                            },
+                            borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                            child: Container(
+                              width: 46,
+                              height: 160,
+                              decoration: BoxDecoration(
+                                color: AppColors.canvas.withAlpha(120),
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
+                                border: Border.all(
+                                  color: AppColors.primary.withAlpha(130),
+                                  width: 1.5,
+                                ),
                               ),
-                              Positioned(
-                                top: 38,
-                                bottom: 12,
-                                child: Center(
-                                  child: RotatedBox(
-                                    quarterTurns: 3,
-                                    child: Text(
-                                      'Afegir llibre / foto',
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: TextStyle(
-                                        fontSize: 11.0,
-                                        fontWeight: FontWeight.w700,
-                                        color: AppColors.primary.withAlpha(200),
-                                        letterSpacing: 0.2,
+                              child: Stack(
+                                alignment: Alignment.center,
+                                children: [
+                                  const Positioned(
+                                    top: 12,
+                                    child: Icon(Icons.add_rounded, color: AppColors.primary, size: 22),
+                                  ),
+                                  Positioned(
+                                    top: 38,
+                                    bottom: 12,
+                                    child: Center(
+                                      child: RotatedBox(
+                                        quarterTurns: 3,
+                                        child: Text(
+                                          'Afegir llibre / foto',
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: TextStyle(
+                                            fontSize: 11.0,
+                                            fontWeight: FontWeight.w700,
+                                            color: AppColors.primary.withAlpha(200),
+                                            letterSpacing: 0.2,
+                                          ),
+                                        ),
                                       ),
                                     ),
                                   ),
-                                ),
+                                ],
                               ),
-                            ],
+                            ),
                           ),
                         ),
-                      ),
-                    ),
-                  ),
+                      )),
           ),
 
           // Tauló físic de fusta horitzontal (#D9C5B2)

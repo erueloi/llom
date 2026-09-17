@@ -6,6 +6,7 @@ import 'package:llom/models/library_model.dart';
 import 'package:llom/models/user_model.dart';
 import 'package:llom/providers/library_provider.dart';
 import 'package:llom/screens/home_screen.dart';
+import 'package:llom/screens/library_stats_screen.dart';
 import 'package:llom/services/bookcase_service.dart';
 import 'package:llom/services/update_service.dart';
 
@@ -177,6 +178,23 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(mockService.deletedBookcaseId, 'bc_action_1');
+    });
+
+    testWidgets('Tapping library_stats_button in HomeScreen navigates to LibraryStatsScreen', (tester) async {
+      final mockService = MockBookcaseServiceForHomeActions(bookcases: [testBookcase]);
+
+      await tester.pumpWidget(createWidget(service: mockService));
+      await tester.pumpAndSettle();
+
+      final statsBtn = find.byKey(const Key('library_stats_button'));
+      expect(statsBtn, findsOneWidget);
+
+      await tester.tap(statsBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.byType(LibraryStatsScreen), findsOneWidget);
+      expect(find.text('Estadístiques'), findsOneWidget);
+      expect(find.text('Biblioteca Piset'), findsOneWidget);
     });
   });
 }
