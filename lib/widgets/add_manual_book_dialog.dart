@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../core/feedback/app_feedback.dart';
 import '../core/theme/app_colors.dart';
 import '../models/book_model.dart';
 import '../models/bookcase_model.dart';
+import '../services/book_enrichment_service.dart';
 import '../services/bookcase_service.dart';
 
 /// Mostra la bottom modal sheet per afegir o editar un llibre en una estanteria
@@ -12,6 +14,7 @@ Future<BookModel?> showBookFormBottomSheet(
   BookModel? existingBook,
   int? initialShelfIndex,
   BookcaseService? bookcaseService,
+  BookEnrichmentService? enrichmentService,
 }) async {
   return showModalBottomSheet<BookModel>(
     context: context,
@@ -24,6 +27,7 @@ Future<BookModel?> showBookFormBottomSheet(
         existingBook: existingBook,
         initialShelfIndex: initialShelfIndex,
         bookcaseService: bookcaseService,
+        enrichmentService: enrichmentService,
       );
     },
   );
@@ -36,6 +40,7 @@ Future<BookModel?> showAddManualBookDialog(
   required BookcaseModel bookcase,
   int? initialShelfIndex,
   BookcaseService? bookcaseService,
+  BookEnrichmentService? enrichmentService,
 }) {
   return showBookFormBottomSheet(
     context,
@@ -43,6 +48,7 @@ Future<BookModel?> showAddManualBookDialog(
     bookcase: bookcase,
     initialShelfIndex: initialShelfIndex,
     bookcaseService: bookcaseService,
+    enrichmentService: enrichmentService,
   );
 }
 
@@ -53,6 +59,7 @@ Future<BookModel?> showEditBookBottomSheet(
   required BookcaseModel bookcase,
   required BookModel book,
   BookcaseService? bookcaseService,
+  BookEnrichmentService? enrichmentService,
 }) {
   return showBookFormBottomSheet(
     context,
@@ -60,6 +67,7 @@ Future<BookModel?> showEditBookBottomSheet(
     bookcase: bookcase,
     existingBook: book,
     bookcaseService: bookcaseService,
+    enrichmentService: enrichmentService,
   );
 }
 
@@ -70,6 +78,7 @@ class AddEditBookBottomSheet extends StatefulWidget {
   final BookModel? existingBook;
   final int? initialShelfIndex;
   final BookcaseService? bookcaseService;
+  final BookEnrichmentService? enrichmentService;
 
   const AddEditBookBottomSheet({
     super.key,
@@ -78,6 +87,7 @@ class AddEditBookBottomSheet extends StatefulWidget {
     this.existingBook,
     this.initialShelfIndex,
     this.bookcaseService,
+    this.enrichmentService,
   });
 
   @override
@@ -91,8 +101,10 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
   final _formKey = GlobalKey<FormState>();
   late final TextEditingController _titleController;
   late final TextEditingController _authorController;
+  late final BookEnrichmentService _enrichmentService;
   late int _selectedShelf;
   bool _isLoading = false;
+  bool _isSearchingAuthor = false;
   String? _errorMessage;
 
   bool get _isEditing => widget.existingBook != null;
@@ -102,6 +114,7 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
     super.initState();
     _titleController = TextEditingController(text: widget.existingBook?.title ?? '');
     _authorController = TextEditingController(text: widget.existingBook?.author ?? '');
+    _enrichmentService = widget.enrichmentService ?? BookEnrichmentService();
 
     final maxShelves = widget.bookcase.shelfCount > 0 ? widget.bookcase.shelfCount : 1;
 
@@ -117,6 +130,42 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
       }
     }
     _selectedShelf = initial.clamp(1, maxShelves);
+  }
+
+  Future<void> _lookupAuthor() async {
+    final title = _titleController.text.trim();
+    if (title.isEmpty) {
+      AppFeedback.showWarning(context, 'Escriu primer el títol del llibre per cercar-ne l\'autor/a.');
+      return;
+    }
+
+    setState(() {
+      _isSearchingAuthor = true;
+    });
+
+    try {
+      final foundAuthor = await _enrichmentService.lookupAuthorByTitle(title);
+      if (!mounted) return;
+
+      if (foundAuthor != null && foundAuthor.isNotEmpty) {
+        setState(() {
+          _authorController.text = foundAuthor;
+        });
+        AppFeedback.showSuccess(context, 'S\'ha trobat l\'autor/a: "$foundAuthor"');
+      } else {
+        AppFeedback.showInfo(context, 'No s\'ha trobat l\'autor/a automàticament.');
+      }
+    } catch (e) {
+      if (mounted) {
+        AppFeedback.showError(context, 'Error en consultar el servei d\'autors.');
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isSearchingAuthor = false;
+        });
+      }
+    }
   }
 
   @override
@@ -159,14 +208,8 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
         );
 
         if (mounted) {
+          AppFeedback.showSuccess(context, 'Llibre "$title" actualitzat correctament!');
           Navigator.of(context).pop(savedBook);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Llibre "$title" actualitzat correctament!'),
-              backgroundColor: AppColors.primaryDark,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
         }
       } else {
         final newBook = BookModel(
@@ -182,14 +225,8 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
         final savedBook = await service.addBook(widget.libraryId, newBook);
 
         if (mounted) {
+          AppFeedback.showSuccess(context, 'Llibre "$title" afegit a la balda $_selectedShelf!');
           Navigator.of(context).pop(savedBook);
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Llibre "$title" afegit a la balda $_selectedShelf!'),
-              backgroundColor: AppColors.primaryDark,
-              behavior: SnackBarBehavior.floating,
-            ),
-          );
         }
       }
     } catch (e) {
@@ -317,6 +354,21 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
                   decoration: InputDecoration(
                     hintText: 'Ex: Antoine de Saint-Exupéry',
                     prefixIcon: const Icon(Icons.person_outline_rounded, color: AppColors.textMuted),
+                    suffixIcon: _isSearchingAuthor
+                        ? const Padding(
+                            padding: EdgeInsets.all(12),
+                            child: SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(strokeWidth: 2),
+                            ),
+                          )
+                        : IconButton(
+                            key: const Key('auto_fill_author_button'),
+                            icon: const Icon(Icons.auto_fix_high_rounded, color: AppColors.primary),
+                            tooltip: 'Cercar l\'autor/a automàticament',
+                            onPressed: _lookupAuthor,
+                          ),
                     border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
                   ),
                 ),

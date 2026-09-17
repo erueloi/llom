@@ -77,11 +77,16 @@ class BookcaseService {
     return toSave;
   }
 
-  /// Actualitza el nom d'un moble d'estanteria
-  Future<void> updateBookcaseName(String libraryId, String bookcaseId, String newName) async {
+  /// Actualitza les dades d'un moble d'estanteria (nom i habitació opcional)
+  Future<void> updateBookcase(
+    String libraryId,
+    String bookcaseId, {
+    required String name,
+    String? room,
+  }) async {
     final cleanLibId = libraryId.trim();
     final cleanBookcaseId = bookcaseId.trim();
-    final cleanName = newName.trim();
+    final cleanName = name.trim();
 
     if (cleanLibId.isEmpty || cleanBookcaseId.isEmpty) {
       throw ArgumentError('libraryId i bookcaseId són obligatoris');
@@ -95,7 +100,17 @@ class BookcaseService {
       throw StateError('FirebaseFirestore no està disponible');
     }
 
-    await collection.doc(cleanBookcaseId).update({'name': cleanName});
+    final updates = <String, dynamic>{
+      'name': cleanName,
+      if (room != null && room.trim().isNotEmpty) 'room': room.trim(),
+    };
+
+    await collection.doc(cleanBookcaseId).update(updates);
+  }
+
+  /// Actualitza el nom d'un moble d'estanteria
+  Future<void> updateBookcaseName(String libraryId, String bookcaseId, String newName) {
+    return updateBookcase(libraryId, bookcaseId, name: newName);
   }
 
   /// Elimina una estanteria d'una biblioteca i esborra en cascada els llibres associats
@@ -294,13 +309,85 @@ class BookcaseService {
     return book;
   }
 
-  /// Puja la foto de la balda a Firebase Storage i desa en batch tots els llibres detectats a Firestore
+  /// Consulta els llibres d'una balda específica d'un moble
+  Future<List<BookModel>> getBooksForShelf(
+    String libraryId,
+    String bookcaseId,
+    int shelfIndex,
+  ) async {
+    final cleanLibId = libraryId.trim();
+    final cleanBcId = bookcaseId.trim();
+    if (cleanLibId.isEmpty || cleanBcId.isEmpty) {
+      return [];
+    }
+
+    final booksColl = _booksRef(cleanLibId);
+    if (booksColl == null) return [];
+
+    final targetShelfCode = '$cleanBcId-B$shelfIndex';
+    final querySnap = await booksColl
+        .where('shelfCode', isEqualTo: targetShelfCode)
+        .get();
+
+    final books = querySnap.docs
+        .map((doc) => BookModel.fromMap(doc.data(), doc.id))
+        .toList();
+    books.sort((a, b) => a.positionIndex.compareTo(b.positionIndex));
+    return books;
+  }
+
+  /// Buida tots els llibres d'una balda d'un moble i decrementa bookCount
+  Future<void> clearShelf(
+    String libraryId,
+    String bookcaseId,
+    int shelfIndex,
+  ) async {
+    final cleanLibId = libraryId.trim();
+    final cleanBcId = bookcaseId.trim();
+    if (cleanLibId.isEmpty || cleanBcId.isEmpty) {
+      throw ArgumentError('libraryId i bookcaseId són obligatoris');
+    }
+
+    final booksColl = _booksRef(cleanLibId);
+    if (booksColl == null || _firestore == null) {
+      throw StateError('FirebaseFirestore no està disponible');
+    }
+
+    final targetShelfCode = '$cleanBcId-B$shelfIndex';
+    final querySnap = await booksColl
+        .where('shelfCode', isEqualTo: targetShelfCode)
+        .get();
+
+    if (querySnap.docs.isEmpty) {
+      return;
+    }
+
+    final batch = _firestore!.batch();
+    for (final doc in querySnap.docs) {
+      batch.delete(doc.reference);
+    }
+
+    final bcDoc = _bookcasesRef(cleanLibId)?.doc(cleanBcId);
+    if (bcDoc != null) {
+      batch.set(
+        bcDoc,
+        {'bookCount': FieldValue.increment(-querySnap.docs.length)},
+        SetOptions(merge: true),
+      );
+    }
+
+    await batch.commit();
+  }
+
+  /// Puja la foto de la balda a Firebase Storage i desa en batch tots els llibres detectats a Firestore.
+  /// Si [replaceExisting] és true, elimina prèviament els llibres existents a aquesta balda i ajusta bookCount.
   Future<List<BookModel>> saveCatalogedShelf({
     required String libraryId,
     required BookcaseModel bookcase,
     required int shelfIndex,
     required Uint8List imageBytes,
     required List<DetectedBookSpine> detectedBooks,
+    bool replaceExisting = false,
     FirebaseStorage? storageInstance,
   }) async {
     final cleanLibId = libraryId.trim();
@@ -332,6 +419,19 @@ class BookcaseService {
     }
 
     final batch = _firestore!.batch();
+    int deletedCount = 0;
+
+    if (replaceExisting) {
+      final targetShelfCode = '${bookcase.id}-B$shelfIndex';
+      final existingDocs = await booksColl
+          .where('shelfCode', isEqualTo: targetShelfCode)
+          .get();
+      for (final doc in existingDocs.docs) {
+        batch.delete(doc.reference);
+      }
+      deletedCount = existingDocs.docs.length;
+    }
+
     final now = DateTime.now();
     final List<BookModel> savedBooks = [];
 
@@ -353,12 +453,153 @@ class BookcaseService {
       savedBooks.add(book);
     }
 
-    if (savedBooks.isNotEmpty) {
+    final netDiff = savedBooks.length - deletedCount;
+    if (netDiff != 0) {
       final bookcaseDoc = _bookcasesRef(cleanLibId)?.doc(bookcase.id);
       if (bookcaseDoc != null) {
         batch.set(
           bookcaseDoc,
-          {'bookCount': FieldValue.increment(savedBooks.length)},
+          {'bookCount': FieldValue.increment(netDiff)},
+          SetOptions(merge: true),
+        );
+      }
+    }
+
+    await batch.commit();
+    return savedBooks;
+  }
+
+  /// Actualitza l'ordre ordinal (positionIndex: 1, 2, 3...) d'una llista de llibres d'una balda en batch a Firestore
+  Future<void> updateShelfBooksOrder({
+    required String libraryId,
+    required List<BookModel> books,
+  }) async {
+    final cleanLibId = libraryId.trim();
+    if (cleanLibId.isEmpty) {
+      throw ArgumentError('libraryId no pot estar buit');
+    }
+    if (books.isEmpty) {
+      return;
+    }
+
+    final booksColl = _booksRef(cleanLibId);
+    if (booksColl == null || _firestore == null) {
+      throw StateError('FirebaseFirestore no està disponible');
+    }
+
+    final batch = _firestore!.batch();
+    for (int i = 0; i < books.length; i++) {
+      final book = books[i];
+      if (book.id.trim().isNotEmpty) {
+        batch.update(
+          booksColl.doc(book.id.trim()),
+          {'positionIndex': i + 1},
+        );
+      }
+    }
+
+    try {
+      await batch.commit();
+    } catch (e) {
+      debugPrint('BookcaseService: Error en actualitzar ordre dels llibres de la balda: $e');
+      rethrow;
+    }
+  }
+
+  /// Actualitza de manera retroactiva els llibres d'una balda utilitzant la foto existent.
+  /// Sincronitza en un únic WriteBatch:
+  /// 1. Elimina els llibres que s'han suprimit a la revisió.
+  /// 2. Actualitza els llibres existents (títol, autor, ordre, caixa, photoUrl).
+  /// 3. Crea documents nous per als llibres afegits manualment durant la revisió.
+  /// 4. Ajusta atòmicament el camp `bookCount` del moble si hi ha diferència neta.
+  Future<List<BookModel>> updateRetroactiveShelf({
+    required String libraryId,
+    required String shelfCode,
+    required List<BookModel> updatedBooks,
+    String? bookcaseId,
+  }) async {
+    final cleanLibId = libraryId.trim();
+    final cleanShelfCode = shelfCode.trim();
+
+    if (cleanLibId.isEmpty || cleanShelfCode.isEmpty) {
+      throw ArgumentError('libraryId i shelfCode són obligatoris');
+    }
+
+    final booksColl = _booksRef(cleanLibId);
+    if (booksColl == null || _firestore == null) {
+      throw StateError('FirebaseFirestore no està disponible');
+    }
+
+    // 1. Obtenim els llibres actualment persistits a aquesta balda
+    final existingQuerySnap = await booksColl
+        .where('shelfCode', isEqualTo: cleanShelfCode)
+        .get();
+    final existingDocs = existingQuerySnap.docs;
+
+    // Deducció de bookcaseId si no es passa explícitament
+    String? targetBcId = bookcaseId?.trim();
+    if (targetBcId == null || targetBcId.isEmpty) {
+      final match = RegExp(r'^(.*)-B\d+$').firstMatch(cleanShelfCode);
+      if (match != null) {
+        targetBcId = match.group(1);
+      } else {
+        targetBcId = updatedBooks.cast<BookModel?>().firstWhere(
+          (b) => b?.bookcaseId != null && b!.bookcaseId!.trim().isNotEmpty,
+          orElse: () => null,
+        )?.bookcaseId;
+        if (targetBcId == null && existingDocs.isNotEmpty) {
+          targetBcId = existingDocs.first.data()['bookcaseId'] as String?;
+        }
+      }
+    }
+
+    final batch = _firestore!.batch();
+
+    // 2. Identifiquem els llibres esborrats
+    final updatedIds = updatedBooks
+        .map((b) => b.id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
+    for (final doc in existingDocs) {
+      if (!updatedIds.contains(doc.id)) {
+        batch.delete(doc.reference);
+      }
+    }
+
+    // 3. Persistim els llibres actualitzats i nous
+    final List<BookModel> savedBooks = [];
+    final now = DateTime.now();
+
+    for (int i = 0; i < updatedBooks.length; i++) {
+      final book = updatedBooks[i];
+      final isNew = book.id.trim().isEmpty || !existingDocs.any((d) => d.id == book.id.trim());
+      final docRef = isNew && book.id.trim().isEmpty
+          ? booksColl.doc()
+          : booksColl.doc(book.id.trim());
+
+      final bookToSave = book.copyWith(
+        id: docRef.id,
+        shelfCode: cleanShelfCode,
+        bookcaseId: book.bookcaseId ?? targetBcId,
+        positionIndex: i + 1,
+        createdAt: isNew && book.createdAt == DateTime.fromMillisecondsSinceEpoch(0)
+            ? now
+            : book.createdAt,
+      );
+
+      batch.set(docRef, bookToSave.toMap(), SetOptions(merge: true));
+      savedBooks.add(bookToSave);
+    }
+
+    // 4. Actualitzem el comptador del moble si hi ha variació neta
+    final netDiff = updatedBooks.length - existingDocs.length;
+    if (netDiff != 0 && targetBcId != null && targetBcId.isNotEmpty) {
+      final bookcaseDoc = _bookcasesRef(cleanLibId)?.doc(targetBcId);
+      if (bookcaseDoc != null) {
+        batch.set(
+          bookcaseDoc,
+          {'bookCount': FieldValue.increment(netDiff)},
           SetOptions(merge: true),
         );
       }

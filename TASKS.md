@@ -738,12 +738,154 @@
   - Actualitzat [test/book_enrichment_service_test.dart](file:///c:/git/llom/test/book_enrichment_service_test.dart) amb proves unitàries exhaustives per a `getSafeDisplayCoverUrl` (simulació Web amb proxy, simulació mòbil directa, prevenció de doble proxy i comprovació d'Open Library).
   - **133 de 133 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
 
+### ✅ Tasca 39: Ocultació del FAB en Cerca a HomeScreen i Modals de Baldes/Estanteries com a Bottom Sheets
+- [x] Ocultació Contextual del FAB a HomeScreen ([lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart)):
+  - Modificat `floatingActionButton` perquè només es mostri quan `canEdit && !isSearching`. Quan l'usuari escriu a la barra de cerca per trobar llibres, el botó flotant d'«Afegir estanteria» s'oculta automàticament per no destorbar els resultats de cerca.
+- [x] Bottom Modal Sheet per Afegir Estanteria ([lib/widgets/library_dialogs.dart](file:///c:/git/llom/lib/widgets/library_dialogs.dart)):
+  - Convertit `showAddBookcaseDialog` d'AlertDialog a `showModalBottomSheet` (`isScrollControlled: true`, vores arrodonides 24px, nansa d'arrossegament superior i `viewInsets.bottom` per suport ergonòmic del teclat).
+  - Inclou nom del moble, habitació/ubicació, selector interactiu de nombre de baldes i botons de cancel·lar i desar.
+- [x] Bottom Modal Sheet per Editar Estanteria ([lib/widgets/library_dialogs.dart](file:///c:/git/llom/lib/widgets/library_dialogs.dart) i [lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart)):
+  - Convertit `showEditBookcaseNameDialog` d'AlertDialog a `showModalBottomSheet` complint estrictament la directriu 2.3 d'`AGENTS.md`.
+  - Afegit mètode `updateBookcase` a `BookcaseService` per permetre actualitzar tant el nom com l'habitació de l'estanteria.
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/home_screen_actions_test.dart](file:///c:/git/llom/test/home_screen_actions_test.dart) (verificant que el FAB s'oculta en escriure a la cerca, reapareix en netejar-la, i comprovant l'obertura i tancament dels nous bottom sheets d'estanteria).
+  - **134 de 134 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 40: Autocompletat d'Autor, Opcions a Baldes Buides, Substitució en Recatalogació i Buidat de Baldes
+- [x] Autocompletat d'Autor amb Vareta Màgica ([lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart) i [lib/widgets/add_manual_book_dialog.dart](file:///c:/git/llom/lib/widgets/add_manual_book_dialog.dart)):
+  - Afegit camp `author` a `BookEnrichmentData` extret tant de Google Books (`volumeInfo['authors']`) com d'Open Library (`doc['author_name']`).
+  - Implementat `BookEnrichmentService.lookupAuthorByTitle(title)` amb cerca seqüencial (memòria cau, Google Books API i Open Library API).
+  - Integrat botó d'acció amb icona de vareta màgica (`Icons.auto_fix_high_rounded`, clau `auto_fill_author_button`) com a `suffixIcon` al camp d'autor.
+  - Mostra indicador de progrés durant la consulta, actualitza el text de l'autor i emet un `SnackBar` informatiu en català.
+- [x] Clarificació de l'Acció a Baldes Buides ([lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart)):
+  - En prémer el llom fantasma (`ghost_spine_X`) d'una balda buida, s'obre una Bottom Modal Sheet ergonòmica que permet escollir directament:
+    * *«Fotografiar i catalogar balda»* (`empty_shelf_option_camera_X`): activa el selector de càmera/galeria per a la detecció per IA.
+    * *«Afegir llibre manualment»* (`empty_shelf_option_manual_X`): obre el formulari d'alta manual amb la balda preseleccionada.
+- [x] Gestió de Substitució en Recatalogar Balda ([lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart) i [lib/screens/shelf_review_screen.dart](file:///c:/git/llom/lib/screens/shelf_review_screen.dart)):
+  - Creat `BookcaseService.getBooksForShelf(libraryId, bookcaseId, shelfIndex)`.
+  - A `ShelfReviewScreen`, abans de desar, es comprova si la balda ja té llibres previs. Si en té, es mostra un `AlertDialog` de confirmació:
+    * *«Mantenir i afegir»* (`keep_existing_shelf_books_button`): afegeix els nous llibres a la balda existent.
+    * *«Substituir balda»* (`replace_existing_shelf_books_button`): esborra els llibres anteriors en batch i ajusta de forma atòmica el `bookCount` del moble.
+- [x] Acció «Buidar balda sencera» ([lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart) i [lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart)):
+  - Creat `BookcaseService.clearShelf(libraryId, bookcaseId, shelfIndex)` que elimina tots els documents de la balda en un `WriteBatch` i decrementa atòmicament `bookCount`.
+  - Afegit botó tonal `IconButton.filledTonal` amb clau `shelf_clear_button_X` a la capçalera de cada balda no buida (només visible per a usuaris amb permisos d'edició).
+  - Diàleg de confirmació de seguretat abans d'executar l'acció amb retorn d'informació via `SnackBar`.
+- [x] Ocultació de FAB en Cerca a BookshelfDetailScreen ([lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart)):
+  - Ocultat el botó flotant `bookshelf_actions_fab` quan hi ha text a la barra de cerca interna per mantenir la pantalla neta.
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/book_enrichment_service_test.dart](file:///c:/git/llom/test/book_enrichment_service_test.dart) (25 tests, incloent cerca d'autor amb fallback i títols buits).
+  - Actualitzat [test/add_manual_book_dialog_test.dart](file:///c:/git/llom/test/add_manual_book_dialog_test.dart) (4 tests, comprovant la vareta màgica i autocompletat).
+  - Actualitzat [test/bookshelf_detail_screen_test.dart](file:///c:/git/llom/test/bookshelf_detail_screen_test.dart) (7 tests, comprovant el nou selector d'opcions a baldes buides i el flux de buidar balda).
+  - Actualitzat [test/shelf_review_screen_test.dart](file:///c:/git/llom/test/shelf_review_screen_test.dart) (9 tests, verificant el diàleg de substitució vs manteniment).
+  - Creat [test/bookcase_service_test.dart](file:///c:/git/llom/test/bookcase_service_test.dart) (5 tests de validació de paràmetres de BookcaseService).
+  - **149 de 149 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 41: Reordenació interactiva de llibres a la balda (Drag & Drop) i Eina de marcatge manual de caixes sobre la foto
+- [x] Reordenació de lloms amb Drag & Drop ([lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart) i [lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart)):
+  - Integrat `ReorderableListView.builder` amb `scrollDirection: Axis.horizontal` i `buildDefaultDragHandles: false` per substituir el `ListView` estàtic.
+  - Cada llom s'embolcalla amb `ReorderableDelayedDragStartListener` (actiu exclusivament quan `canEdit && _searchQuery.isEmpty`), garantint que el desplaçament horitzontal tàctil i el clic senzill per veure detalls continuïn funcionant sense interferències.
+  - `proxyDecorator` personalitzat amb `AnimatedBuilder` que eleva suaument el llom seleccionat amb escala (`1.05`) i ombra translúcida neta.
+  - Gestió d'estat optimista local amb `_shelfBooksOverride[shelfNumber]`, recalculant a l'instant els ordinals `#1, #2, #3...`.
+  - Persistència asíncrona a Cloud Firestore en segon pla mitjançant `BookcaseService.updateShelfBooksOrder(libraryId, books)` usant un `WriteBatch` atòmic.
+- [x] Eina de dibuix de caixes manuals sobre la fotografia ([lib/screens/shelf_review_screen.dart](file:///c:/git/llom/lib/screens/shelf_review_screen.dart)):
+  - Botó d'acció destacat a l'AppBar (`btn_draw_spine_mode`) per commutar entre el mode d'inspecció/zoom i el mode de dibuix de lloms.
+  - Bloqueig automàtic de pan i zoom a `InteractiveViewer` (`panEnabled: !_isDrawingMode`, `scaleEnabled: !_isDrawingMode`) mentre el dibuix està actiu per capturar el traç sense moviments indesitjats.
+  - Dibuix interactiu en temps real amb `_ManualBoxPainter` (fons terracota translúcid i doble vora nítida blanca/salmó).
+  - Normalització matemàtica de coordenades `[ymin, xmin, ymax, xmax]` en escala `0..1000` adaptada a la relació d'aspecte de render de la imatge.
+  - Bottom sheet modal per introduir títol i autor del nou llom marcat, integrat amb la vareta màgica d'autocompletat d'autor (`auto_fill_spine_author`).
+  - **Interpolació física automàtica**: en desar el llom manual (`isManual: true`), la col·lecció `_spines` s'ordena de forma immediata per coordenades `xmin` (`_spines.sort((a, b) => a.xmin.compareTo(b.xmin))`), situant el nou llibre exactament en la seva posició física d'esquerra a dreta respecte als detectats per la IA.
+  - Indicació visual de lloms manuals tant a les caixes de la fotografia (vora i etiqueta `(Manual)`) com a la nova barra inferior de xips de revisió (`ActionChip` amb ordinal `#N` i selecció ràpida).
+- [x] Suite de tests unitària i de widgets:
+  - Creat [test/shelf_reorder_test.dart](file:///c:/git/llom/test/shelf_reorder_test.dart) (verificació del renderitzat del `ReorderableListView` horitzontal, listeners de reordenació i crida a `updateShelfBooksOrder`).
+  - Ampliat [test/shelf_review_screen_test.dart](file:///c:/git/llom/test/shelf_review_screen_test.dart) (13 tests: activació del mode dibuix, gest de traçat de caixes, ordenació automàtica per `xmin`, etiquetatge `(Manual)` i autocompletat d'autor amb vareta màgica).
+  - **156 de 156 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 42: Mode d'Edició Retroactiva de Baldes Reutilitzant la Foto Existent
+- [x] Obertura de revisió des del visor de foto de balda ([lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart)):
+  - Al diàleg `_showShelfPhotoViewer` s'ha afegit el botó d'acció destacat **«Editar detecció / Afegir llibre»** (`Icons.edit_outlined`, clau `btn_edit_shelf_detection`), disponible per a usuaris amb permisos d'edició (`canEdit: true`).
+  - En prémer-lo, tanca el visor de fotografia i obre directament `ShelfReviewScreen` amb:
+    * `photoUrl`: l'adreça de Firebase Storage prèviament allotjada.
+    * `existingBooks`: la llista actual de `BookModel` d'aquella balda física.
+    * `isRetroactiveEdit: true`.
+- [x] Adaptació de `ShelfReviewScreen` per a edició retroactiva ([lib/screens/shelf_review_screen.dart](file:///c:/git/llom/lib/screens/shelf_review_screen.dart)):
+  - Si `isRetroactiveEdit == true`:
+    * Converteix els llibres de `existingBooks` en objectes `DetectedBookSpine`, reutilitzant les coordenades de caixa `box` desades o generant-ne una distribució espacial proporcional equilibrada.
+    * Resol automàticament la relació d'aspecte de la imatge remota (`_resolveNetworkImage`) a través de `NetworkImage` quan `imageBytes` és buit.
+    * Omet la pujada de la imatge a Firebase Storage (ja que ja està allotjada).
+    * Omet el diàleg de confirmació de substitució vs manteniment (ja que l'edició és directa sobre la balda existent).
+    * Permet lliurement modificar títol i autor dels llibres, eliminar falsos positius, dibuixar noves caixes sobre la foto amb l'eina de dibuix i afegir nous llibres manuals.
+    * Canvia l'etiqueta del botó d'acció inferior a **«Desar canvis a la balda»** (i *«Desant canvis a la balda...»* durant el procés).
+- [x] Sincronització atòmica a `BookcaseService.updateRetroactiveShelf` ([lib/services/bookcase_service.dart](file:///c:/git/llom/lib/services/bookcase_service.dart)):
+  - Creat el mètode `updateRetroactiveShelf({required String libraryId, required String shelfCode, required List<BookModel> updatedBooks, String? bookcaseId})`.
+  - Consulta els documents previs de la balda a Firestore (`shelfCode == targetShelfCode`).
+  - Elimina en un `WriteBatch` els llibres descartats o esborrats durant la revisió.
+  - Actualitza els documents existents amb els canvis de dades, caixes i nou ordre ordinal (`positionIndex: 1, 2, 3...`).
+  - Crea documents nous per als llibres afegits manualment durant la sessió de revisió.
+  - Calcula la diferència neta (`netDiff = updatedBooks.length - existingDocs.length`) i ajusta de forma atòmica el camp `bookCount` del document del moble a Firestore via `FieldValue.increment(netDiff)`.
+- [x] Correcció del contrast visual dels xips de revisió ([lib/screens/shelf_review_screen.dart](file:///c:/git/llom/lib/screens/shelf_review_screen.dart)):
+  - S'ha corregit el color del text del `label` dels `ActionChip` a `AppColors.textMain` (fosc sobre fons blanc de pastilla) quan el xip no està seleccionat, i `Colors.white` sobre `AppColors.primary` quan està seleccionat.
+  - S'ha assegurat el color de fons del xip mitjançant `color: WidgetStatePropertyAll(...)` per evitar que Flutter Material 3 apliqui estils per defecte amb text invisible.
+- [x] Correcció de propagació del text de cerca en navegar des de les targetes de resultat ([lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart)):
+  - S'ha afegit `initialSearchQuery: _searchQuery` en navegar cap a `BookshelfDetailScreen` des del botó «Anar a Balda X» (`BookCard.onTap`) i en la resolució d'un únic resultat coincident.
+- [x] Correcció de deselecció del llibre en esborrar o modificar la cerca ([lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart) i [lib/screens/shelf_detail_screen.dart](file:///c:/git/llom/lib/screens/shelf_detail_screen.dart)):
+  - S'ha afegit la neteja de `_highlightBookId` a `null` tant quan es prem el botó `(x)` per esborrar el text com quan s'esborra manualment el camp de cerca (`_searchController.addListener`).
+  - D'aquesta manera, el comportament és 100% homogeni: en esborrar el text de cerca, tant si s'ha accedit des de la capçalera de l'estanteria com si s'ha accedit directament des de la balda, el llibre es deselecciona i la prestatgeria recupera l'estat net sense lloms enfosquits ni fletxes descendents.
+- [x] Suite de tests unitària i de widgets:
+  - Actualitzat [test/bookcase_service_test.dart](file:///c:/git/llom/test/bookcase_service_test.dart) (validació de paràmetres buits o invàlids a `updateRetroactiveShelf`).
+  - Actualitzat [test/shelf_review_screen_test.dart](file:///c:/git/llom/test/shelf_review_screen_test.dart) (15 tests: comprovació del renderitzat retroactiu amb `photoUrl` i `existingBooks`, text del botó «Desar canvis a la balda», crida exclusiva a `updateRetroactiveShelf`, eliminació de llibre existent i alta manual en mode retroactiu).
+  - Actualitzat [test/bookshelf_detail_screen_test.dart](file:///c:/git/llom/test/bookshelf_detail_screen_test.dart) (8 tests: verificació del botó `btn_edit_shelf_detection` al visor de foto i navegació a `ShelfReviewScreen`).
+  - Actualitzat [test/home_search_firebase_test.dart](file:///c:/git/llom/test/home_search_firebase_test.dart) (verificació que en prémer la targeta d'un llibre a la cerca de l'inici, el text de cerca es preserva al cercador de `BookshelfDetailScreen`, i que en prémer `(x)` per esborrar la cerca, el llibre es deselecciona correctament).
+  - **161 de 161 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 43: Mòdul Centralitzat AppFeedback (Top Floating Pill / Dynamic Island)
+- [x] Disseny i implementació del mòdul centralitzat [lib/core/feedback/app_feedback.dart](file:///c:/git/llom/lib/core/feedback/app_feedback.dart):
+  - Notificacions superiors flotants en forma de píndola ergonòmica (`BorderRadius.circular(30)`), centrades a `Alignment.topCenter` respectant el `SafeArea`.
+  - Disseny d'alt contrast i elegància editorial: fons carbó profund (`#221F1E`), vora suau (`white.withAlpha(28)`), ombra flotant profunda i tipografia nítida (14sp blanca).
+  - Amplada adaptativa continguda (`maxWidth: 480px` a Web i tauleta, mai una biga rígida al 100% d'amplada).
+  - Jerarquia semàntica amb 4 variants:
+    * `AppFeedback.showSuccess`: Icona verd menta càlid (`Icons.check_circle_rounded`, `#4EBA6F`).
+    * `AppFeedback.showError`: Icona vermell carmesí (`Icons.error_rounded`, `#E55353`), suport per a `actionLabel` i `onAction`.
+    * `AppFeedback.showWarning`: Icona ambre càlid (`Icons.warning_amber_rounded`, `#E5A038`).
+    * `AppFeedback.showInfo`: Icona salmó corporatiu (`Icons.info_rounded`, `AppColors.primary`).
+  - Animació suau d'entrada i sortida (`SlideTransition` vertical + `FadeTransition` amb `Curves.easeOutCubic`).
+  - Auto-tancament gestionat pel cicle de vida del widget amb cancel·lació segura del timer a `dispose`.
+  - Tancament manual per toc a la píndola o gest de lliscament cap amunt.
+  - Zero col·lisions amb els botons d'acció flotants (FAB) inferiors com «+ Afegir llibres» o «+ Afegir estanteria».
+  - Fallback resilient per a entorns de test o sense `Overlay` actiu delegant a `ScaffoldMessenger`.
+- [x] Configuració global de tema [lib/core/theme/app_theme.dart](file:///c:/git/llom/lib/core/theme/app_theme.dart):
+  - Afegit `snackBarTheme` amb `behavior: SnackBarBehavior.floating`, cantonades arrodonides (24px) i fons fosc com a segona línia de defensa per a components natius.
+- [x] Adopció transversal a tota l'aplicació:
+  - [lib/widgets/add_manual_book_dialog.dart](file:///c:/git/llom/lib/widgets/add_manual_book_dialog.dart): Alta i actualització de llibres, avisos de validació i autocompletat d'autor.
+  - [lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart): Localització física, eliminació i avisos d'error.
+  - [lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart): Buidat de baldes, catalogació de fotos i gestió d'errors de Gemini amb botó «Canviar clau».
+  - [lib/screens/shelf_review_screen.dart](file:///c:/git/llom/lib/screens/shelf_review_screen.dart): Autocompletat d'autors, addició de lloms manuals, alertes de mida de caixes i desar balda.
+  - [lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart): Comprovació silenciosa d'actualitzacions OTA amb botó d'acció «Actualitzar» i avís de biblioteca activa.
+  - [lib/screens/profile_screen.dart](file:///c:/git/llom/lib/screens/profile_screen.dart): Comprovació manual d'actualitzacions i confirmació de versió al dia.
+  - [lib/widgets/library_dialogs.dart](file:///c:/git/llom/lib/widgets/library_dialogs.dart): Creació, unió, sortida, eliminació de biblioteques i còpia del codi d'invitació al porta-retalls.
+- [x] Suite de tests unitària i de widgets:
+  - Creat [test/app_feedback_test.dart](file:///c:/git/llom/test/app_feedback_test.dart): Verificació de renderitzat d'èxit, error amb botó d'acció, icones d'alerta i informació, tancament per toc i neteja de timers.
+  - **164 de 164 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 44: Dibuix Realista de Baldes Buides vs Plenes i Detalls Decoratius Artesanals (Planteta & Llibres Inclinats)
+- [x] Representació realista de baldes buides vs plenes a `BookcaseCard` ([lib/widgets/bookcase_card.dart](file:///c:/git/llom/lib/widgets/bookcase_card.dart)):
+  - S'ha afegit el paràmetre opcional `shelfBookCounts` (`List<int>?`) a `BookcaseCard`.
+  - **Baldes buides** (`count == 0` o `unit.bookCount == 0`): No es renderitzen lloms de llibres; la balda es mostra neta amb el tauló de fusta buit, transmetent immediatament a l'usuari quins prestatges queden per catalogar.
+  - **Baldes plenes** (`count > 0`): Es renderitzen lloms de colors editorials harmonitzats, escalant subtilment la quantitat de barres en funció del volum de llibres de la balda.
+  - **Base de fusta càlida**: Actualitzada la base de cada balda al to de fusta `#D9C5B2` amb vora suau `#CBB5A1` i ombra càlida inferior segons les directrius de disseny d'`AGENTS.md`.
+- [x] Detalls decoratius artesanals ("cozy home" / biblioteca viscuda):
+  - **Planteta artesanal de terracota (`_buildMiniPlant()`)**: Quan el moble té llibres (`unit.bookCount > 0`), a la balda superior (`shelfIndex == 0`) es renderitza un detall artesanal en forma de petit test de terracota (`#C86D51`) amb una suculenta de fulles verdes en ventall (`#5BA86E` i `#439055`), reposant directament sobre el tauló.
+  - **Llibre inclinat en diagonal (`leaning_book_decoration`)**: A la segona balda (`shelfIndex == 1` o balda única), l'últim llibre de la fila es mostra inclinat a ~0.20 rad recolzant-se sobre els llibres rectes veïns, trencant la rigidesa geomètrica i donant la sensació d'una prestatgeria viva.
+  - **Moble buit**: Si el moble té 0 llibres, totes les baldes es mostren netes de fusta sense llibres ni ornaments.
+- [x] Propagació des de `BookcaseCarousel` ([lib/widgets/bookcase_carousel.dart](file:///c:/git/llom/lib/widgets/bookcase_carousel.dart)):
+  - Afegit el paràmetre opcional `shelfBookCountsMap` (`Map<String, List<int>>?`) que transmet a cada targeta `shelfBookCountsMap?[unit.id]`.
+- [x] Càlcul de recomptes per balda a `HomeScreen` ([lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart)):
+  - Implementat el mètode `_calculateShelfBookCounts(bookcases, allBooks)` que extreu el recompte exacte de cada balda física a partir del `shelfCode` (`-B<index>`) i `bookcaseId`.
+  - Integrat tant al carrusel real de Firestore (`_buildRealBookcaseCarousel`) com al mode mock de demostració (`_buildBookcaseContent`).
+- [x] Suite de tests unitària i de widgets:
+  - Ampliat [test/bookcase_carousel_test.dart](file:///c:/git/llom/test/bookcase_carousel_test.dart) (4 tests: verificació de l'aparició de la planteta i llibre inclinat en mobles amb llibres, baldes netes de fusta sense ornaments quan `bookCount == 0`, gestió de baldes mixtes amb `shelfBookCounts: [6, 0, 0]`, i propagació de `shelfBookCountsMap` a través del carrusel).
+  - **166 de 166 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
 ---
 
 ## 🚀 Propers Passos
 *(S'aniran afegint a mesura que es defineixin noves tasques)*
-
-
-
-
-

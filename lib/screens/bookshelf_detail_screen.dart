@@ -1,6 +1,8 @@
+import 'dart:ui';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../core/feedback/app_feedback.dart';
 import '../core/theme/app_colors.dart';
 import '../models/book_model.dart';
 import '../models/bookcase_model.dart';
@@ -47,6 +49,36 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
   late final TextEditingController _searchController;
   String _searchQuery = '';
   String? _highlightBookId;
+  final Map<int, List<BookModel>> _shelfBooksOverride = {};
+
+  void _onReorderShelfBooks(
+    int shelfNumber,
+    int oldIndex,
+    int newIndex,
+    List<BookModel> currentBooks,
+  ) {
+    if (newIndex > oldIndex) {
+      newIndex -= 1;
+    }
+    if (oldIndex == newIndex) return;
+
+    final reordered = List<BookModel>.from(currentBooks);
+    final movedItem = reordered.removeAt(oldIndex);
+    reordered.insert(newIndex, movedItem);
+
+    setState(() {
+      _shelfBooksOverride[shelfNumber] = reordered;
+    });
+
+    _bookcaseService
+        .updateShelfBooksOrder(
+          libraryId: widget.libraryId,
+          books: reordered,
+        )
+        .catchError((e) {
+          debugPrint('Error actualitzant ordre de llibres a Firestore: $e');
+        });
+  }
 
   @override
   void initState() {
@@ -60,6 +92,9 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
       if (_searchQuery != text) {
         setState(() {
           _searchQuery = text;
+          if (_highlightBookId != null) {
+            _highlightBookId = null;
+          }
         });
       }
     });
@@ -239,6 +274,152 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
     );
   }
 
+  void _showEmptyShelfOptionsSheet(BookcaseModel currentBookcase, int shelfNumber) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) {
+        return Container(
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+          ),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Center(
+                child: Container(
+                  width: 44,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withAlpha(120),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+              Text(
+                'Afegir a la Balda $shelfNumber',
+                style: const TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textMain,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Tria com vols afegir contingut a aquesta balda del moble ${currentBookcase.name}.',
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textMuted,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                key: Key('empty_shelf_option_camera_$shelfNumber'),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withAlpha(50),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.camera_alt_rounded, color: AppColors.primary, size: 24),
+                ),
+                title: const Text(
+                  'Fotografiar i catalogar balda',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textMain),
+                ),
+                subtitle: const Text(
+                  'Fes una foto a la balda i detecta automàticament els lloms',
+                  style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                ),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  _showCaptureSourceSheet(currentBookcase, shelfNumber);
+                },
+              ),
+              const Divider(height: 14, color: AppColors.canvas),
+              ListTile(
+                key: Key('empty_shelf_option_manual_$shelfNumber'),
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppColors.accent.withAlpha(50),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.edit_note_rounded, color: AppColors.primary, size: 24),
+                ),
+                title: const Text(
+                  'Afegir llibre manualment',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: AppColors.textMain),
+                ),
+                subtitle: const Text(
+                  'Introdueix el títol i l\'autor/a amb formulari',
+                  style: TextStyle(fontSize: 13, color: AppColors.textMuted),
+                ),
+                onTap: () {
+                  Navigator.of(sheetContext).pop();
+                  showAddManualBookDialog(
+                    context,
+                    libraryId: widget.libraryId,
+                    bookcase: currentBookcase,
+                    initialShelfIndex: shelfNumber,
+                    bookcaseService: _bookcaseService,
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _confirmClearShelf(BookcaseModel currentBookcase, int shelfNumber, int bookCount) async {
+    final llibresText = bookCount == 1 ? '1 llibre' : '$bookCount llibres';
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text('Buidar Balda $shelfNumber'),
+          content: Text(
+            'Vols buidar la Balda $shelfNumber? S\'eliminaran els $llibresText d\'aquest prestatge.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel·lar'),
+            ),
+            ElevatedButton(
+              key: const Key('confirm_clear_shelf_button'),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+              ),
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: const Text('Buidar balda'),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed == true && mounted) {
+      try {
+        await _bookcaseService.clearShelf(widget.libraryId, currentBookcase.id, shelfNumber);
+        if (mounted) {
+          AppFeedback.showSuccess(context, 'S\'ha buidat la Balda $shelfNumber.');
+        }
+      } catch (e) {
+        if (mounted) {
+          AppFeedback.showError(context, 'Error en buidar la balda: $e');
+        }
+      }
+    }
+  }
+
   Future<void> _captureAndAnalyzeShelf(
     BookcaseModel currentBookcase,
     int shelfNumber, {
@@ -320,22 +501,14 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
         Navigator.of(context, rootNavigator: true).pop(); // Tancar diàleg de càrrega
         final isQuotaOrKeyError = e is GeminiVisionException && (e.isQuotaExhausted || e.isInvalidKey);
         final errorMessage = e is GeminiVisionException ? e.message : 'Error en analitzar la balda amb Gemini: $e';
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(errorMessage),
-            backgroundColor: Colors.red[700],
-            behavior: SnackBarBehavior.floating,
-            duration: Duration(seconds: isQuotaOrKeyError ? 8 : 4),
-            action: isQuotaOrKeyError
-                ? SnackBarAction(
-                    label: 'Canviar clau',
-                    textColor: Colors.white,
-                    onPressed: () {
-                      ShelfVisionService.promptApiKeyIfNeeded(context, forceShow: true);
-                    },
-                  )
-                : null,
-          ),
+        AppFeedback.showError(
+          context,
+          errorMessage,
+          duration: Duration(seconds: isQuotaOrKeyError ? 8 : 4),
+          actionLabel: isQuotaOrKeyError ? 'Canviar clau' : null,
+          onAction: isQuotaOrKeyError
+              ? () => ShelfVisionService.promptApiKeyIfNeeded(context, forceShow: true)
+              : null,
         );
       }
       return;
@@ -354,19 +527,15 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
           bookcase: currentBookcase,
           shelfIndex: shelfNumber,
           bookcaseService: _bookcaseService,
+          enrichmentService: widget.enrichmentService,
         ),
       ),
     );
 
     if (result == true && mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'S\'han catalogat els llibres correctament a la Balda $shelfNumber.',
-          ),
-          backgroundColor: AppColors.primaryDark,
-          behavior: SnackBarBehavior.floating,
-        ),
+      AppFeedback.showSuccess(
+        context,
+        'S\'han catalogat els llibres correctament a la Balda $shelfNumber.',
       );
     }
   }
@@ -546,11 +715,26 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                           for (int index = 0; index < currentBookcase.shelfCount; index++) ...[
                             () {
                               final shelfNum = index + 1;
-                              final shelfBooks = allBooks.where((b) {
+                              final serverBooks = allBooks.where((b) {
                                 final code = b.shelfCode.trim();
                                 return code == '${currentBookcase.id}-B$shelfNum' ||
                                     code.endsWith('-B$shelfNum');
                               }).toList();
+
+                              List<BookModel> shelfBooks;
+                              final overrideList = _shelfBooksOverride[shelfNum];
+                              if (overrideList != null) {
+                                final overrideIds = overrideList.map((b) => b.id).toList();
+                                final serverIds = serverBooks.map((b) => b.id).toList();
+                                if (listEquals(overrideIds, serverIds)) {
+                                  _shelfBooksOverride.remove(shelfNum);
+                                  shelfBooks = serverBooks;
+                                } else {
+                                  shelfBooks = overrideList;
+                                }
+                              } else {
+                                shelfBooks = serverBooks;
+                              }
 
                               return _buildShelfSection(
                                 shelfNumber: shelfNum,
@@ -566,7 +750,7 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                   );
                 },
               ),
-              floatingActionButton: canEdit
+              floatingActionButton: (canEdit && _searchQuery.isEmpty)
                   ? FloatingActionButton.extended(
                       key: const Key('bookshelf_actions_fab'),
                       onPressed: () => _showAddActionsSheet(context, currentBookcase),
@@ -633,7 +817,14 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                     color: AppColors.textMuted,
                     size: 22,
                   ),
-                  onPressed: () => _searchController.clear(),
+                  onPressed: () {
+                    _searchController.clear();
+                    if (_highlightBookId != null) {
+                      setState(() {
+                        _highlightBookId = null;
+                      });
+                    }
+                  },
                 )
               : null,
           border: InputBorder.none,
@@ -726,10 +917,32 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                         shelfNumber: shelfNumber,
                         positionLabel: positionLabel,
                         bookcaseName: currentBookcase.name,
+                        currentBookcase: currentBookcase,
+                        existingBooks: books,
+                        canEdit: canEdit,
                       );
                     },
                   ),
                   if (canEdit) const SizedBox(width: 8),
+                ],
+                if (canEdit && books.isNotEmpty) ...[
+                  IconButton.filledTonal(
+                    key: Key('shelf_clear_button_$shelfNumber'),
+                    tooltip: 'Buidar balda $shelfNumber',
+                    icon: const Icon(
+                      Icons.delete_sweep_outlined,
+                      color: AppColors.primary,
+                      size: 20,
+                    ),
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppColors.accent.withAlpha(60),
+                      shape: const CircleBorder(),
+                    ),
+                    onPressed: () {
+                      _confirmClearShelf(currentBookcase, shelfNumber, books.length);
+                    },
+                  ),
+                  const SizedBox(width: 8),
                 ],
                 if (canEdit)
                   IconButton.filledTonal(
@@ -758,10 +971,34 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
           SizedBox(
             height: 195,
             child: books.isNotEmpty
-                ? ListView.builder(
+                ? ReorderableListView.builder(
                     scrollDirection: Axis.horizontal,
+                    buildDefaultDragHandles: false,
                     padding: const EdgeInsets.symmetric(horizontal: 4),
                     itemCount: books.length,
+                    onReorder: (oldIdx, newIdx) {
+                      _onReorderShelfBooks(shelfNumber, oldIdx, newIdx, books);
+                    },
+                    proxyDecorator: (child, index, animation) {
+                      return AnimatedBuilder(
+                        animation: animation,
+                        builder: (context, child) {
+                          final animValue = Curves.easeInOut.transform(animation.value);
+                          final elevation = lerpDouble(0, 8, animValue) ?? 0;
+                          final scale = lerpDouble(1.0, 1.05, animValue) ?? 1.0;
+                          return Transform.scale(
+                            scale: scale,
+                            child: Material(
+                              elevation: elevation,
+                              color: Colors.transparent,
+                              shadowColor: Colors.black.withAlpha(90),
+                              child: child,
+                            ),
+                          );
+                        },
+                        child: child,
+                      );
+                    },
                     itemBuilder: (context, bIdx) {
                       final book = books[bIdx];
                       final matchesQuery = _searchQuery.isNotEmpty && (
@@ -771,23 +1008,28 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                       final isHighlighted = matchesQuery || (_highlightBookId != null && book.id == _highlightBookId);
                       final isDimmed = (_searchQuery.isNotEmpty || _highlightBookId != null) && !isHighlighted;
 
-                      return Align(
-                        alignment: Alignment.bottomCenter,
-                        child: Padding(
-                          padding: const EdgeInsets.only(right: 8),
-                          child: BookSpineWidget(
-                            book: book,
-                            displayIndex: bIdx + 1,
-                            isHighlighted: isHighlighted,
-                            isDimmed: isDimmed,
-                            onTap: () {
-                              if (_highlightBookId != null) {
-                                setState(() {
-                                  _highlightBookId = null;
-                                });
-                              }
-                              _showBookDetails(book, currentBookcase, canEdit);
-                            },
+                      return ReorderableDelayedDragStartListener(
+                        key: ValueKey(book.id),
+                        index: bIdx,
+                        enabled: canEdit && _searchQuery.isEmpty,
+                        child: Align(
+                          alignment: Alignment.bottomCenter,
+                          child: Padding(
+                            padding: const EdgeInsets.only(right: 8),
+                            child: BookSpineWidget(
+                              book: book,
+                              displayIndex: bIdx + 1,
+                              isHighlighted: isHighlighted,
+                              isDimmed: isDimmed,
+                              onTap: () {
+                                if (_highlightBookId != null) {
+                                  setState(() {
+                                    _highlightBookId = null;
+                                  });
+                                }
+                                _showBookDetails(book, currentBookcase, canEdit);
+                              },
+                            ),
                           ),
                         ),
                       );
@@ -800,13 +1042,7 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                       child: InkWell(
                         key: Key('ghost_spine_$shelfNumber'),
                         onTap: () {
-                          showAddManualBookDialog(
-                            context,
-                            libraryId: widget.libraryId,
-                            bookcase: currentBookcase,
-                            initialShelfIndex: shelfNumber,
-                            bookcaseService: _bookcaseService,
-                          );
+                          _showEmptyShelfOptionsSheet(currentBookcase, shelfNumber);
                         },
                         borderRadius: const BorderRadius.vertical(top: Radius.circular(6)),
                         child: Container(
@@ -886,6 +1122,9 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
     required int shelfNumber,
     required String positionLabel,
     required String bookcaseName,
+    required BookcaseModel currentBookcase,
+    List<BookModel> existingBooks = const [],
+    bool canEdit = false,
   }) {
     showDialog(
       context: context,
@@ -939,7 +1178,9 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
             // Visor interactiu de la fotografia de la balda sencera
             Flexible(
               child: ClipRRect(
-                borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(canEdit ? 0 : 20),
+                ),
                 child: InteractiveViewer(
                   maxScale: 4.0,
                   child: Image.network(
@@ -988,6 +1229,51 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                 ),
               ),
             ),
+
+            if (canEdit) ...[
+              const Divider(height: 1, color: AppColors.canvas),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: ElevatedButton.icon(
+                    key: const Key('btn_edit_shelf_detection'),
+                    icon: const Icon(Icons.edit_outlined),
+                    label: const Text(
+                      'Editar detecció / Afegir llibre',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.primary,
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: () {
+                      Navigator.of(dialogCtx).pop();
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => ShelfReviewScreen(
+                            imageBytes: Uint8List(0),
+                            photoUrl: photoUrl,
+                            libraryId: widget.libraryId,
+                            bookcase: currentBookcase,
+                            shelfIndex: shelfNumber,
+                            initialDetectedSpines: const [],
+                            existingBooks: existingBooks,
+                            isRetroactiveEdit: true,
+                            bookcaseService: _bookcaseService,
+                            enrichmentService: widget.enrichmentService,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
+            ],
           ],
         ),
       ),

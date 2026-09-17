@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../core/feedback/app_feedback.dart';
 import '../core/theme/app_colors.dart';
 import '../models/book_model.dart';
 import '../models/bookcase_model.dart';
@@ -173,14 +174,9 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
         ),
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'El llibre "${_currentBook.title}" es troba a ${_getShelfLabel(_currentBook.shelfCode)} de ${widget.bookcase.name}.',
-          ),
-          backgroundColor: AppColors.primaryDark,
-          behavior: SnackBarBehavior.floating,
-        ),
+      AppFeedback.showInfo(
+        context,
+        'El llibre "${_currentBook.title}" es troba a ${_getShelfLabel(_currentBook.shelfCode)} de ${widget.bookcase.name}.',
       );
     }
   }
@@ -719,7 +715,6 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
     );
 
     if (shouldDelete == true && mounted) {
-      final messenger = ScaffoldMessenger.of(context);
       Navigator.of(context).pop();
       try {
         await _bookcaseService.deleteBook(
@@ -727,22 +722,14 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
           _currentBook.id,
           widget.bookcase.id,
         );
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('S\'ha eliminat "${_currentBook.title}".'),
-            backgroundColor: Colors.red.shade800,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        if (mounted) {
+          AppFeedback.showSuccess(context, 'S\'ha eliminat "${_currentBook.title}".');
+        }
         widget.onBookChanged?.call();
       } catch (e) {
-        messenger.showSnackBar(
-          SnackBar(
-            content: Text('Error en eliminar el llibre: $e'),
-            backgroundColor: Colors.red.shade900,
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
+        if (mounted) {
+          AppFeedback.showError(context, 'Error en eliminar el llibre: $e');
+        }
       }
     }
   }

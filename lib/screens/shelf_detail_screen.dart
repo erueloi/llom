@@ -34,20 +34,28 @@ class _ShelfDetailScreenState extends State<ShelfDetailScreen> {
   final Map<String, GlobalKey> _shelfKeys = {};
 
   String _searchQuery = '';
+  String? _highlightBookId;
   late final Map<String, List<BookModel>> _booksByShelf;
 
   @override
   void initState() {
     super.initState();
+    _highlightBookId = widget.highlightBookId;
     if (widget.initialSearchQuery != null && widget.initialSearchQuery!.trim().isNotEmpty) {
       _searchController.text = widget.initialSearchQuery!.trim();
       _searchQuery = widget.initialSearchQuery!.trim();
     }
 
     _searchController.addListener(() {
-      setState(() {
-        _searchQuery = _searchController.text.trim();
-      });
+      final text = _searchController.text.trim();
+      if (_searchQuery != text) {
+        setState(() {
+          _searchQuery = text;
+          if (_highlightBookId != null) {
+            _highlightBookId = null;
+          }
+        });
+      }
     });
 
     _initBooks();
@@ -115,6 +123,11 @@ class _ShelfDetailScreenState extends State<ShelfDetailScreen> {
   }
 
   void _showBookDetailModal(BookModel book) {
+    if (_highlightBookId != null) {
+      setState(() {
+        _highlightBookId = null;
+      });
+    }
     showModalBottomSheet(
       context: context,
       backgroundColor: AppColors.surface,
@@ -320,7 +333,14 @@ class _ShelfDetailScreenState extends State<ShelfDetailScreen> {
                                 color: AppColors.textMuted,
                                 size: 22,
                               ),
-                              onPressed: () => _searchController.clear(),
+                              onPressed: () {
+                                _searchController.clear();
+                                if (_highlightBookId != null) {
+                                  setState(() {
+                                    _highlightBookId = null;
+                                  });
+                                }
+                              },
                             )
                           : null,
                       border: InputBorder.none,
@@ -362,7 +382,7 @@ class _ShelfDetailScreenState extends State<ShelfDetailScreen> {
                         subtitle: '${shelfBooks.length} llibres',
                         books: shelfBooks,
                         searchQuery: _searchQuery,
-                        highlightedBookId: widget.highlightBookId,
+                        highlightedBookId: _highlightBookId,
                         canEdit: canEdit,
                         onBookTap: _showBookDetailModal,
                         onCameraTap: () {

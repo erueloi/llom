@@ -6,6 +6,7 @@ import '../models/book_model.dart';
 
 /// Dades d'enriquiment recuperades de Google Books o Open Library
 class BookEnrichmentData {
+  final String? author;
   final String? synopsis;
   final String? coverUrl;
   final int? pageCount;
@@ -13,6 +14,7 @@ class BookEnrichmentData {
   final String? infoUrl;
 
   const BookEnrichmentData({
+    this.author,
     this.synopsis,
     this.coverUrl,
     this.pageCount,
@@ -22,6 +24,7 @@ class BookEnrichmentData {
 
   Map<String, dynamic> toMap() {
     return {
+      if (author != null) 'author': author,
       if (synopsis != null) 'synopsis': synopsis,
       if (coverUrl != null) 'coverUrl': coverUrl,
       if (pageCount != null) 'pageCount': pageCount,
@@ -35,6 +38,7 @@ class BookEnrichmentData {
       identical(this, other) ||
       other is BookEnrichmentData &&
           runtimeType == other.runtimeType &&
+          author == other.author &&
           synopsis == other.synopsis &&
           coverUrl == other.coverUrl &&
           pageCount == other.pageCount &&
@@ -43,6 +47,7 @@ class BookEnrichmentData {
 
   @override
   int get hashCode =>
+      author.hashCode ^
       synopsis.hashCode ^
       coverUrl.hashCode ^
       pageCount.hashCode ^
@@ -245,6 +250,11 @@ class BookEnrichmentService {
 
     BookEnrichmentData? googleBooksData;
     if (volumeInfo != null) {
+      final authorsList = volumeInfo['authors'] as List<dynamic>?;
+      final author = (authorsList != null && authorsList.isNotEmpty)
+          ? authorsList.first.toString().trim()
+          : null;
+
       final rawDesc = volumeInfo['description'] as String?;
       final synopsis = rawDesc != null ? cleanHtml(rawDesc) : null;
 
@@ -260,6 +270,7 @@ class BookEnrichmentService {
           : fallbackInfoUrl;
 
       googleBooksData = BookEnrichmentData(
+        author: author,
         synopsis: synopsis,
         coverUrl: coverUrl,
         pageCount: pageCount,
@@ -285,6 +296,9 @@ class BookEnrichmentService {
       final openLibData = await fetchFromOpenLibrary(cleanTitle, cleanAuthor);
       if (openLibData != null) {
         final merged = BookEnrichmentData(
+          author: (googleBooksData?.author != null && googleBooksData!.author!.isNotEmpty)
+              ? googleBooksData.author
+              : openLibData.author,
           synopsis: (googleBooksData?.synopsis != null && googleBooksData!.synopsis!.isNotEmpty)
               ? googleBooksData.synopsis
               : openLibData.synopsis,
@@ -347,6 +361,10 @@ class BookEnrichmentService {
       }
 
       final doc = docs.first as Map<String, dynamic>;
+      final authorsList = doc['author_name'] as List<dynamic>?;
+      final authorName = (authorsList != null && authorsList.isNotEmpty)
+          ? authorsList.first.toString().trim()
+          : null;
 
       final coverI = doc['cover_i'];
       final coverUrl = coverI != null
@@ -387,6 +405,7 @@ class BookEnrichmentService {
       }
 
       return BookEnrichmentData(
+        author: authorName,
         synopsis: synopsis,
         coverUrl: coverUrl,
         pageCount: pageCount,
@@ -397,6 +416,66 @@ class BookEnrichmentService {
       debugPrint('BookEnrichmentService: Error a Open Library per "$cleanTitle": $e');
       return null;
     }
+  }
+
+  /// Cerca l'autor/a d'un llibre a partir exclusivament del seu títol mitjançant Google Books o Open Library
+  Future<String?> lookupAuthorByTitle(String title) async {
+    final cleanTitle = cleanSearchTerm(title);
+    if (cleanTitle.isEmpty) return null;
+
+    // 1. Memòria cau
+    for (final entry in _cache.entries) {
+      if (entry.key.startsWith('${cleanTitle.toLowerCase()}_') &&
+          entry.value.author != null &&
+          entry.value.author!.isNotEmpty) {
+        return entry.value.author;
+      }
+    }
+
+    // 2. Google Books API
+    final queryParams = {
+      'q': 'intitle:"$cleanTitle"',
+      'maxResults': '3',
+      'printType': 'books',
+      if (hasValidGoogleBooksApiKey) 'key': _googleBooksApiKey,
+    };
+    final url = Uri.https('www.googleapis.com', '/books/v1/volumes', queryParams);
+
+    try {
+      final response = await _httpClient
+          .get(url)
+          .timeout(const Duration(seconds: 4));
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = jsonDecode(response.body);
+        final items = data['items'] as List<dynamic>?;
+        if (items != null && items.isNotEmpty) {
+          for (final item in items) {
+            final volumeInfo = item['volumeInfo'] as Map<String, dynamic>?;
+            final authors = volumeInfo?['authors'] as List<dynamic>?;
+            if (authors != null && authors.isNotEmpty) {
+              final firstAuthor = authors.first.toString().trim();
+              if (firstAuthor.isNotEmpty) {
+                return firstAuthor;
+              }
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('BookEnrichmentService: Error a lookupAuthorByTitle (Google Books): $e');
+    }
+
+    // 3. Suport Open Library
+    try {
+      final openLibData = await fetchFromOpenLibrary(cleanTitle, '');
+      if (openLibData?.author != null && openLibData!.author!.isNotEmpty) {
+        return openLibData.author;
+      }
+    } catch (e) {
+      debugPrint('BookEnrichmentService: Error a lookupAuthorByTitle (Open Library): $e');
+    }
+
+    return null;
   }
 
   /// Enriquir el llibre i desar les noves dades a Firestore si encara no estan persistides

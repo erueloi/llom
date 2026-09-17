@@ -11,6 +11,7 @@ import 'package:llom/screens/home_screen.dart';
 import 'package:llom/services/bookcase_service.dart';
 import 'package:llom/services/update_service.dart';
 import 'package:llom/widgets/book_card.dart';
+import 'package:llom/widgets/book_spine_widget.dart';
 
 class MockBookcaseServiceForSearch extends BookcaseService {
   final List<BookcaseModel> bookcases;
@@ -131,6 +132,14 @@ void main() {
       // S'ha obert BookshelfDetailScreen (la pantalla real)
       expect(find.byType(BookshelfDetailScreen), findsOneWidget);
       expect(find.text('Estanteria Saló Real'), findsWidgets);
+      // El cercador intern manté el terme de cerca de HomeScreen
+      final internalField = tester.widget<TextField>(
+        find.descendant(
+          of: find.byType(BookshelfDetailScreen),
+          matching: find.byType(TextField),
+        ),
+      );
+      expect(internalField.controller?.text, 'calders');
     });
   });
 
@@ -163,6 +172,44 @@ void main() {
       await tester.pump();
 
       expect(find.text('Crònica de la veritat oculta'), findsOneWidget);
+    });
+
+    testWidgets('Clearing internal search bar deselects the highlighted book when navigated from search', (tester) async {
+      final mockService = MockBookcaseServiceForSearch(bookcases: [testBookcase], books: [testBook]);
+      final provider = LibraryProvider();
+      provider.currentUser = testUser;
+      provider.activeLibrary = testLib;
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<LibraryProvider>.value(
+          value: provider,
+          child: MaterialApp(
+            home: BookshelfDetailScreen(
+              bookcase: testBookcase,
+              libraryId: testLib.id,
+              bookcaseService: mockService,
+              highlightBookId: testBook.id,
+              initialSearchQuery: 'calders',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Inicialment el llibre està destacat i mostra la fletxa descendent
+      expect(find.byIcon(Icons.arrow_downward_rounded), findsOneWidget);
+      final spineBefore = tester.widget<BookSpineWidget>(find.byType(BookSpineWidget));
+      expect(spineBefore.isHighlighted, isTrue);
+
+      // Prem el botó d'esborrat (x) del cercador
+      expect(find.byIcon(Icons.cancel_rounded), findsOneWidget);
+      await tester.tap(find.byIcon(Icons.cancel_rounded));
+      await tester.pumpAndSettle();
+
+      // Ara el llibre s'ha deseleccionat: sense fletxa i isHighlighted == false
+      expect(find.byIcon(Icons.arrow_downward_rounded), findsNothing);
+      final spineAfter = tester.widget<BookSpineWidget>(find.byType(BookSpineWidget));
+      expect(spineAfter.isHighlighted, isFalse);
     });
   });
 }

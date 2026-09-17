@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:provider/provider.dart';
+import 'package:llom/core/feedback/app_feedback.dart';
 import 'package:llom/core/theme/app_colors.dart';
 import 'package:llom/models/bookcase_model.dart';
 import 'package:llom/models/library_model.dart';
@@ -38,15 +39,7 @@ Future<void> showCreateLibraryDialog(BuildContext context) async {
             if (context.mounted) {
               if (success) {
                 Navigator.of(dialogContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'Biblioteca "$name" creada i activada!',
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                    backgroundColor: AppColors.primaryDark,
-                  ),
-                );
+                AppFeedback.showSuccess(context, 'Biblioteca "$name" creada i activada!');
               } else {
                 setState(() {
                   isLoading = false;
@@ -185,14 +178,9 @@ Future<void> showJoinLibraryDialog(BuildContext context) async {
             if (context.mounted) {
               if (success) {
                 Navigator.of(dialogContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text(
-                      'T\'has unit a "${provider.activeLibrary?.name ?? 'la biblioteca'}"!',
-                      style: const TextStyle(fontSize: 16),
-                    ),
-                    backgroundColor: AppColors.primaryDark,
-                  ),
+                AppFeedback.showSuccess(
+                  context,
+                  'T\'has unit a "${provider.activeLibrary?.name ?? 'la biblioteca'}"!',
                 );
               } else {
                 setState(() {
@@ -399,15 +387,9 @@ Future<void> showShareLibraryDialog(BuildContext context) async {
                     ElevatedButton.icon(
                       onPressed: () {
                         Clipboard.setData(ClipboardData(text: library.inviteCode));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(
-                              'Codi "${library.inviteCode}" copiat al porta-retalls!',
-                              style: const TextStyle(fontSize: 16),
-                            ),
-                            backgroundColor: AppColors.primaryDark,
-                            duration: const Duration(seconds: 2),
-                          ),
+                        AppFeedback.showSuccess(
+                          context,
+                          'Codi "${library.inviteCode}" copiat al porta-retalls!',
                         );
                       },
                       icon: const Icon(Icons.copy_rounded, size: 18),
@@ -537,12 +519,7 @@ Future<void> showLeaveLibraryDialog(BuildContext context, LibraryModel library) 
             if (context.mounted) {
               if (success) {
                 Navigator.of(dialogContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Has sortit de "${library.name}".'),
-                    backgroundColor: AppColors.primaryDark,
-                  ),
-                );
+                AppFeedback.showSuccess(context, 'Has sortit de "${library.name}".');
               } else {
                 setState(() {
                   isLoading = false;
@@ -658,11 +635,9 @@ Future<void> showDeleteLibraryDialog(BuildContext context, LibraryModel library)
             if (context.mounted) {
               if (success) {
                 Navigator.of(dialogContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('S\'ha eliminat la biblioteca "${library.name}".'),
-                    backgroundColor: Colors.red.shade700,
-                  ),
+                AppFeedback.showSuccess(
+                  context,
+                  'S\'ha eliminat la biblioteca "${library.name}".',
                 );
               } else {
                 setState(() {
@@ -808,7 +783,7 @@ Future<void> showDeleteLibraryDialog(BuildContext context, LibraryModel library)
   );
 }
 
-/// Diàleg accessible per afegir una nova estanteria / moble a la biblioteca activa
+/// Bottom modal sheet accessible per afegir una nova estanteria / moble a la biblioteca activa
 Future<void> showAddBookcaseDialog(BuildContext context, String libraryId) async {
   final nameController = TextEditingController();
   final roomController = TextEditingController();
@@ -816,11 +791,15 @@ Future<void> showAddBookcaseDialog(BuildContext context, String libraryId) async
   bool isLoading = false;
   String? errorMessage;
 
-  await showDialog<void>(
+  await showModalBottomSheet<void>(
     context: context,
-    builder: (dialogContext) {
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
       return StatefulBuilder(
         builder: (context, setState) {
+          final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
           Future<void> submit() async {
             final name = nameController.text.trim();
             final room = roomController.text.trim();
@@ -850,13 +829,8 @@ Future<void> showAddBookcaseDialog(BuildContext context, String libraryId) async
               await BookcaseService().addBookcase(libraryId, newBookcase);
 
               if (context.mounted) {
-                Navigator.of(dialogContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Estanteria "$name" afegida correctament!'),
-                    backgroundColor: AppColors.primaryDark,
-                  ),
-                );
+                Navigator.of(sheetContext).pop();
+                AppFeedback.showSuccess(context, 'Estanteria "$name" afegida correctament!');
               }
             } catch (e) {
               if (context.mounted) {
@@ -868,36 +842,68 @@ Future<void> showAddBookcaseDialog(BuildContext context, String libraryId) async
             }
           }
 
-          return AlertDialog(
-            backgroundColor: AppColors.surface,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            titlePadding: const EdgeInsets.fromLTRB(24, 24, 24, 8),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 24, vertical: 8),
-            actionsPadding: const EdgeInsets.fromLTRB(16, 8, 20, 20),
-            title: const Row(
-              children: [
-                Icon(Icons.shelves, color: AppColors.primary, size: 28),
-                SizedBox(width: 10),
-                Text(
-                  'Nova estanteria',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textMain,
-                  ),
-                ),
-              ],
+          return Container(
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
-            content: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 420),
+            padding: EdgeInsets.fromLTRB(24, 12, 24, bottomInset + 20),
+            child: SafeArea(
+              top: false,
               child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Defineix les característiques físiques del teu moble per representar les baldes amb precisió.',
-                      style: TextStyle(fontSize: 15, color: AppColors.textMuted, height: 1.3),
+                    // Nansa superior per arrossegar
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 5,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withAlpha(120),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
+                    ),
+
+                    // Capçalera amb icona i títol
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withAlpha(50),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.shelves, color: AppColors.primary, size: 28),
+                        ),
+                        const SizedBox(width: 14),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Nova estanteria',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textMain,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Defineix les característiques físiques del moble',
+                                style: TextStyle(
+                                  fontSize: 13,
+                                  color: AppColors.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 18),
 
@@ -999,35 +1005,50 @@ Future<void> showAddBookcaseDialog(BuildContext context, String libraryId) async
                         style: const TextStyle(fontSize: 14, color: Colors.red, fontWeight: FontWeight.w600),
                       ),
                     ],
+                    const SizedBox(height: 24),
+
+                    // Botons d'acció
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: isLoading ? null : () => Navigator.of(sheetContext).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              side: BorderSide(color: AppColors.accent.withAlpha(120)),
+                            ),
+                            child: const Text('Cancel·lar', style: TextStyle(fontSize: 16, color: AppColors.textMuted)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: isLoading ? null : submit,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            child: isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.white)),
+                                  )
+                                : const Text(
+                                    'Afegir estanteria',
+                                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: isLoading ? null : () => Navigator.of(dialogContext).pop(),
-                child: const Text('Cancel·lar', style: TextStyle(fontSize: 16, color: AppColors.textMuted)),
-              ),
-              ElevatedButton(
-                onPressed: isLoading ? null : submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
-                ),
-                child: isLoading
-                    ? const SizedBox(
-                        width: 20,
-                        height: 20,
-                        child: CircularProgressIndicator(strokeWidth: 2, valueColor: AlwaysStoppedAnimation(Colors.white)),
-                      )
-                    : const Text(
-                        'Afegir estanteria',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                      ),
-              ),
-            ],
           );
         },
       );
@@ -1293,7 +1314,7 @@ void showLibrarySelectorSheet(BuildContext context) {
   );
 }
 
-/// Diàleg per editar el nom d'un moble d'estanteria
+/// Bottom modal sheet per editar les dades d'un moble d'estanteria
 Future<void> showEditBookcaseNameDialog(
   BuildContext context,
   String libraryId,
@@ -1301,16 +1322,22 @@ Future<void> showEditBookcaseNameDialog(
   BookcaseService? bookcaseService,
 }) async {
   final nameController = TextEditingController(text: bookcase.name);
+  final roomController = TextEditingController(text: bookcase.room);
   String? errorMessage;
   bool isLoading = false;
 
-  await showDialog<void>(
+  await showModalBottomSheet<void>(
     context: context,
-    builder: (dialogContext) {
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (sheetContext) {
       return StatefulBuilder(
         builder: (context, setState) {
+          final bottomInset = MediaQuery.of(context).viewInsets.bottom;
+
           Future<void> submit() async {
             final newName = nameController.text.trim();
+            final newRoom = roomController.text.trim();
             if (newName.isEmpty) {
               setState(() {
                 errorMessage = "El nom de l'estanteria no pot estar buit.";
@@ -1325,16 +1352,16 @@ Future<void> showEditBookcaseNameDialog(
 
             try {
               final service = bookcaseService ?? BookcaseService();
-              await service.updateBookcaseName(libraryId, bookcase.id, newName);
+              await service.updateBookcase(
+                libraryId,
+                bookcase.id,
+                name: newName,
+                room: newRoom.isNotEmpty ? newRoom : bookcase.room,
+              );
 
               if (context.mounted) {
-                Navigator.of(dialogContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Nom canviat a "$newName" correctament!'),
-                    backgroundColor: AppColors.primaryDark,
-                  ),
-                );
+                Navigator.of(sheetContext).pop();
+                AppFeedback.showSuccess(context, 'Nom canviat a "$newName" correctament!');
               }
             } catch (e) {
               if (context.mounted) {
@@ -1346,71 +1373,147 @@ Future<void> showEditBookcaseNameDialog(
             }
           }
 
-          return AlertDialog(
-            backgroundColor: AppColors.surface,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            title: const Row(
-              children: [
-                Icon(Icons.edit_rounded, color: AppColors.primary, size: 26),
-                SizedBox(width: 10),
-                Text(
-                  'Editar nom',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: AppColors.textMain,
-                  ),
-                ),
-              ],
+          return Container(
+            decoration: const BoxDecoration(
+              color: AppColors.surface,
+              borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
             ),
-            content: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 400),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const Text(
-                    'Escriu el nou nom per a aquesta estanteria:',
-                    style: TextStyle(fontSize: 15, color: AppColors.textMuted),
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: nameController,
-                    autofocus: true,
-                    style: const TextStyle(fontSize: 17, color: AppColors.textMain),
-                    decoration: InputDecoration(
-                      hintText: 'Ex: Estanteria Menjador',
-                      prefixIcon: const Icon(Icons.shelves, color: AppColors.textMuted),
-                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+            padding: EdgeInsets.fromLTRB(24, 12, 24, bottomInset + 20),
+            child: SafeArea(
+              top: false,
+              child: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Nansa superior per arrossegar
+                    Center(
+                      child: Container(
+                        width: 44,
+                        height: 5,
+                        margin: const EdgeInsets.only(bottom: 16),
+                        decoration: BoxDecoration(
+                          color: AppColors.accent.withAlpha(120),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                      ),
                     ),
-                  ),
-                  if (errorMessage != null) ...[
-                    const SizedBox(height: 10),
-                    Text(
-                      errorMessage!,
-                      style: TextStyle(fontSize: 14, color: Colors.red.shade700, fontWeight: FontWeight.w600),
+
+                    // Capçalera
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppColors.accent.withAlpha(50),
+                            borderRadius: BorderRadius.circular(14),
+                          ),
+                          child: const Icon(Icons.edit_rounded, color: AppColors.primary, size: 26),
+                        ),
+                        const SizedBox(width: 14),
+                        const Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Editar estanteria',
+                                style: TextStyle(
+                                  fontSize: 22,
+                                  fontWeight: FontWeight.bold,
+                                  color: AppColors.textMain,
+                                ),
+                              ),
+                              SizedBox(height: 2),
+                              Text(
+                                'Escriu el nou nom per a aquesta estanteria:',
+                                style: TextStyle(fontSize: 14, color: AppColors.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
+
+                    // Camp Nom
+                    const Text(
+                      'Nom del moble',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textMain),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: nameController,
+                      autofocus: true,
+                      style: const TextStyle(fontSize: 16, color: AppColors.textMain),
+                      decoration: InputDecoration(
+                        hintText: 'Ex: Estanteria Menjador',
+                        prefixIcon: const Icon(Icons.shelves, color: AppColors.textMuted),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                    const SizedBox(height: 14),
+
+                    // Camp Habitació / Ubicació
+                    const Text(
+                      'Habitació / Ubicació',
+                      style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: AppColors.textMain),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: roomController,
+                      style: const TextStyle(fontSize: 16, color: AppColors.textMain),
+                      decoration: InputDecoration(
+                        hintText: 'Ex: Menjador, Sala d\'Estar, Despatx',
+                        prefixIcon: const Icon(Icons.room_rounded, color: AppColors.textMuted),
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                    if (errorMessage != null) ...[
+                      const SizedBox(height: 12),
+                      Text(
+                        errorMessage!,
+                        style: TextStyle(fontSize: 14, color: Colors.red.shade700, fontWeight: FontWeight.w600),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+
+                    // Botons
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: isLoading ? null : () => Navigator.of(sheetContext).pop(),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                              side: BorderSide(color: AppColors.accent.withAlpha(120)),
+                            ),
+                            child: const Text('Cancel·lar', style: TextStyle(fontSize: 16, color: AppColors.textMuted)),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: isLoading ? null : submit,
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              foregroundColor: Colors.white,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                            ),
+                            child: isLoading
+                                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
+                                : const Text('Desar canvis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+                          ),
+                        ),
+                      ],
                     ),
                   ],
-                ],
+                ),
               ),
             ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(dialogContext).pop(),
-                child: const Text('Cancel·lar', style: TextStyle(color: AppColors.textMuted, fontSize: 16)),
-              ),
-              ElevatedButton(
-                onPressed: isLoading ? null : submit,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-                child: isLoading
-                    ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                    : const Text('Desar canvis', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-              ),
-            ],
           );
         },
       );
@@ -1443,24 +1546,14 @@ Future<void> showDeleteBookcaseDialog(
 
               if (context.mounted) {
                 Navigator.of(dialogContext).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Estanteria "${bookcase.name}" eliminada.'),
-                    backgroundColor: Colors.red.shade700,
-                  ),
-                );
+                AppFeedback.showSuccess(context, 'Estanteria "${bookcase.name}" eliminada.');
               }
             } catch (e) {
               if (context.mounted) {
                 setState(() {
                   isLoading = false;
                 });
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(
-                    content: Text('Error en eliminar: ${e.toString()}'),
-                    backgroundColor: Colors.red.shade800,
-                  ),
-                );
+                AppFeedback.showError(context, 'Error en eliminar: ${e.toString()}');
               }
             }
           }

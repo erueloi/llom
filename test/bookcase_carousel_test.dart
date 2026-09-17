@@ -47,6 +47,74 @@ void main() {
 
       await tester.tap(find.byType(BookcaseCard));
       expect(tapped, isTrue);
+
+      // El moble té llibres, per tant ha de renderitzar la planteta i el llibre inclinat
+      expect(find.byKey(const Key('mini_plant_decoration')), findsOneWidget);
+      expect(find.byKey(const Key('leaning_book_decoration')), findsOneWidget);
+    });
+
+    testWidgets('Renders bare wooden shelves with no decorations when bookCount is 0', (WidgetTester tester) async {
+      const emptyUnit = ShelfUnit(
+        id: 'u_empty',
+        name: 'Estanteria Buida',
+        location: 'Estudi',
+        shelfCount: 3,
+        bookCount: 0,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 400,
+              child: BookcaseCard(
+                unit: emptyUnit,
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('Estanteria Buida'), findsOneWidget);
+      expect(find.text('3 baldes · 0 llibres'), findsOneWidget);
+
+      // Cap llibre ni detall decoratiu en un moble completament buit
+      expect(find.byKey(const Key('mini_plant_decoration')), findsNothing);
+      expect(find.byKey(const Key('leaning_book_decoration')), findsNothing);
+    });
+
+    testWidgets('Respects shelfBookCounts with mixed empty and filled shelves', (WidgetTester tester) async {
+      const unit = ShelfUnit(
+        id: 'u_mixed',
+        name: 'Estanteria Mixta',
+        location: 'Saló',
+        shelfCount: 3,
+        bookCount: 6,
+      );
+
+      // Balda 1 té llibres (6), baldes 2 i 3 estan buides (0, 0)
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: SizedBox(
+              width: 300,
+              height: 400,
+              child: BookcaseCard(
+                unit: unit,
+                shelfBookCounts: const [6, 0, 0],
+                onTap: () {},
+              ),
+            ),
+          ),
+        ),
+      );
+
+      // Balda superior (amb llibres) té la planteta
+      expect(find.byKey(const Key('mini_plant_decoration')), findsOneWidget);
+      // Balda 2 (índex 1) està buida (0 llibres), per tant no hi ha llibre inclinat
+      expect(find.byKey(const Key('leaning_book_decoration')), findsNothing);
     });
   });
 
@@ -62,6 +130,10 @@ void main() {
               height: 500,
               child: BookcaseCarousel(
                 units: units,
+                shelfBookCountsMap: const {
+                  'u1': [20, 20, 20, 20],
+                  'u2': [20, 20, 20],
+                },
                 onUnitSelected: (u) => selected = u,
               ),
             ),

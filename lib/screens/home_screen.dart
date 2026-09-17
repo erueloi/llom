@@ -2,6 +2,7 @@ import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import '../core/constants/mock_data.dart';
+import '../core/feedback/app_feedback.dart';
 import '../core/theme/app_colors.dart';
 import '../models/book_model.dart';
 import '../models/bookcase_model.dart';
@@ -85,20 +86,14 @@ class _HomeScreenState extends State<HomeScreen> {
       final updateInfo = await _updateService.checkUpdate();
       if (!mounted) return;
       if (updateInfo != null && updateInfo.hasUpdate) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('Nova versió disponible (v${updateInfo.latestVersion})'),
-            behavior: SnackBarBehavior.floating,
-            backgroundColor: AppColors.primaryDark,
-            duration: const Duration(seconds: 8),
-            action: SnackBarAction(
-              label: 'Actualitzar',
-              textColor: AppColors.accent,
-              onPressed: () {
-                _updateService.downloadApk(updateInfo.apkUrl);
-              },
-            ),
-          ),
+        AppFeedback.showInfo(
+          context,
+          'Nova versió disponible (v${updateInfo.latestVersion})',
+          duration: const Duration(seconds: 8),
+          actionLabel: 'Actualitzar',
+          onAction: () {
+            _updateService.downloadApk(updateInfo.apkUrl);
+          },
         );
       }
     } catch (_) {
@@ -226,6 +221,7 @@ class _HomeScreenState extends State<HomeScreen> {
         bookcase: bookcase,
         libraryId: libraryId,
         highlightBookId: book.id,
+        initialSearchQuery: _searchQuery,
       );
     } else if (grouped.length == 1 && total > 1) {
       final bookcase = grouped.keys.first;
@@ -251,6 +247,7 @@ class _HomeScreenState extends State<HomeScreen> {
         bookcase: unit,
         initialShelfId: book.shelfCode,
         highlightBookId: book.id,
+        initialSearchQuery: _searchQuery,
       );
     }
     // Cas 2: Múltiples resultats però TOTS a la mateixa estanteria -> obre l'estanteria amb cerca
@@ -485,7 +482,7 @@ class _HomeScreenState extends State<HomeScreen> {
                                           )
                                         : (bookcases.isEmpty
                                             ? _buildEmptyState(activeLibrary.id, canEdit)
-                                            : _buildRealBookcaseCarousel(bookcases, activeLibrary.id, canEdit))),
+                                            : _buildRealBookcaseCarousel(bookcases, activeLibrary.id, canEdit, allBooks: allBooks))),
                               ),
                             ],
                           ),
@@ -536,7 +533,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
       ),
-      floatingActionButton: canEdit
+      floatingActionButton: (canEdit && !isSearching)
           ? FloatingActionButton.extended(
               key: const Key('add_bookcase_fab'),
               onPressed: () {
@@ -544,12 +541,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 if (libId.isNotEmpty) {
                   showAddBookcaseDialog(context, libId);
                 } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Primer has de tenir una biblioteca activa.'),
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
+                  AppFeedback.showWarning(context, 'Primer has de tenir una biblioteca activa.');
                 }
               },
               backgroundColor: AppColors.primary,
@@ -646,13 +638,47 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildRealBookcaseCarousel(List<BookcaseModel> bookcases, String libraryId, bool canEdit) {
+  Map<String, List<int>> _calculateShelfBookCounts(
+    List<BookcaseModel> bookcases,
+    List<BookModel> allBooks,
+  ) {
+    final Map<String, List<int>> countsMap = {};
+    for (final bc in bookcases) {
+      final counts = List<int>.filled(bc.shelfCount, 0);
+      for (final book in allBooks) {
+        final matchesBookcase = book.bookcaseId == bc.id ||
+            book.shelfCode.trim().startsWith('${bc.id}-B');
+        if (matchesBookcase) {
+          final match = RegExp(r'-B(\d+)$').firstMatch(book.shelfCode.trim());
+          if (match != null) {
+            final shelfNum = int.tryParse(match.group(1)!);
+            if (shelfNum != null && shelfNum >= 1 && shelfNum <= bc.shelfCount) {
+              counts[shelfNum - 1]++;
+            }
+          }
+        }
+      }
+      countsMap[bc.id] = counts;
+    }
+    return countsMap;
+  }
+
+  Widget _buildRealBookcaseCarousel(
+    List<BookcaseModel> bookcases,
+    String libraryId,
+    bool canEdit, {
+    List<BookModel> allBooks = const [],
+  }) {
     final units = bookcases.map((b) => b.toShelfUnit()).toList();
+    final shelfBookCountsMap = allBooks.isNotEmpty
+        ? _calculateShelfBookCounts(bookcases, allBooks)
+        : null;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 85, top: 6),
       child: BookcaseCarousel(
         units: units,
+        shelfBookCountsMap: shelfBookCountsMap,
         canEdit: canEdit,
         onUnitSelected: (unit) {
           final bookcase = bookcases.firstWhere(
@@ -682,10 +708,30 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildBookcaseContent(String libraryId, bool canEdit) {
     if (libraryId.isEmpty) {
+      final mockCounts = <String, List<int>>{};
+      for (int i = 0; i < _units.length; i++) {
+        final unit = _units[i];
+        final prefix = 'E${i + 1}';
+        final counts = List<int>.filled(unit.shelfCount, 0);
+        for (final b in MockData.mockBooks) {
+          if (b.shelfCode.startsWith(prefix)) {
+            final match = RegExp(r'-B(\d+)$').firstMatch(b.shelfCode);
+            if (match != null) {
+              final sNum = int.tryParse(match.group(1)!);
+              if (sNum != null && sNum >= 1 && sNum <= unit.shelfCount) {
+                counts[sNum - 1]++;
+              }
+            }
+          }
+        }
+        mockCounts[unit.id] = counts;
+      }
+
       return Padding(
         padding: const EdgeInsets.only(bottom: 85, top: 6),
         child: BookcaseCarousel(
           units: _units,
+          shelfBookCountsMap: mockCounts,
           canEdit: canEdit,
           onUnitSelected: (unit) {
             final bookcase = BookcaseModel(
@@ -1063,6 +1109,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       bookcase: bookcase,
                       libraryId: libraryId,
                       highlightBookId: book.id,
+                      initialSearchQuery: _searchQuery,
                     );
                   },
                 );
@@ -1280,6 +1327,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       bookcase: unit,
                       initialShelfId: book.shelfCode,
                       highlightBookId: book.id,
+                      initialSearchQuery: _searchQuery,
                     );
                   },
                 );

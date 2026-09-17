@@ -2,6 +2,7 @@ import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import '../core/feedback/app_feedback.dart';
 import '../core/theme/app_colors.dart';
 import '../models/user_model.dart';
 import '../providers/library_provider.dart';
@@ -123,16 +124,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _handleCheckUpdate(BuildContext context, UpdateService service) async {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(
-        content: Text('Comprovant actualitzacions...'),
-        duration: Duration(seconds: 2),
-      ),
+    AppFeedback.showInfo(
+      context,
+      'Comprovant actualitzacions...',
+      duration: const Duration(seconds: 2),
     );
 
     final updateInfo = await service.checkUpdate();
     if (!context.mounted) return;
-    ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
     if (updateInfo != null && updateInfo.hasUpdate) {
       showDialog(
@@ -187,13 +186,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
         },
       );
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Ja tens la darrera versió instal·lada.'),
-          backgroundColor: AppColors.primaryDark,
-          behavior: SnackBarBehavior.floating,
-          duration: Duration(seconds: 3),
-        ),
+      AppFeedback.showSuccess(
+        context,
+        'Ja tens la darrera versió instal·lada.',
       );
     }
   }

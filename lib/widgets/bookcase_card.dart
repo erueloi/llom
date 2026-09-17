@@ -9,6 +9,7 @@ class BookcaseCard extends StatelessWidget {
   final VoidCallback? onEdit;
   final VoidCallback? onDelete;
   final bool canEdit;
+  final List<int>? shelfBookCounts;
 
   const BookcaseCard({
     super.key,
@@ -18,15 +19,18 @@ class BookcaseCard extends StatelessWidget {
     this.onEdit,
     this.onDelete,
     this.canEdit = true,
+    this.shelfBookCounts,
   });
 
-  // Paleta de colors càlids per als lloms simulats
+  // Paleta de colors càlids i editorials per als lloms simulats
   static const List<Color> _spineColors = [
-    Color(0xFFF2856D), // Salmó
-    Color(0xFFF8B4A6), // Rosa
-    Color(0xFFFFFFFF), // Blanc
-    Color(0xFFF2EBE9), // Sorra càlida
-    Color(0xFFDE6D54), // Salmó intens
+    Color(0xFFF2856D), // Salmó terracota
+    Color(0xFFF8B4A6), // Rosa càlid
+    Color(0xFFFFFFFF), // Blanc porcellana
+    Color(0xFFF5EBE6), // Crema càlid
+    Color(0xFFDE6D54), // Terracota intens
+    Color(0xFF7A9E9F), // Blau verdós editorial suau
+    Color(0xFFE9C46A), // Mostassa càlida
   ];
 
   @override
@@ -205,61 +209,203 @@ class BookcaseCard extends StatelessWidget {
   }
 
   Widget _buildShelfRow(int shelfIndex) {
-    // Generar entre 7 i 12 barres de llibres simulats per a cada balda
-    final bookSpinesCount = 8 + (shelfIndex * 3 + unit.id.hashCode) % 5;
+    final bool isShelfEmpty;
+    final int bookSpinesCount;
+
+    if (shelfBookCounts != null && shelfIndex < shelfBookCounts!.length) {
+      final count = shelfBookCounts![shelfIndex];
+      isShelfEmpty = count == 0;
+      bookSpinesCount = isShelfEmpty
+          ? 0
+          : (count <= 2
+              ? 4
+              : (count <= 5 ? 7 : (count <= 10 ? 9 : 12)));
+    } else {
+      isShelfEmpty = unit.bookCount == 0;
+      bookSpinesCount = isShelfEmpty
+          ? 0
+          : (8 + (shelfIndex * 3 + unit.id.hashCode) % 5);
+    }
+
+    final bool showPlant = shelfIndex == 0 && unit.bookCount > 0;
+    final bool hasLeaningBook = !isShelfEmpty &&
+        bookSpinesCount >= 4 &&
+        (shelfIndex == 1 || (unit.shelfCount == 1 && shelfIndex == 0));
+    final int straightSpinesCount = hasLeaningBook ? bookSpinesCount - 1 : bookSpinesCount;
 
     return Column(
       children: [
-        // Llibres descansant a la balda
+        // Zona superior: llibres i detalls artesanals que reposen sobre el tauló
         Expanded(
           child: Align(
             alignment: Alignment.bottomCenter,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: List.generate(bookSpinesCount, (bIndex) {
-                final seed = (shelfIndex * 13 + bIndex * 7 + unit.name.length) % 100;
-                final color = _spineColors[seed % _spineColors.length];
-                final heightFactor = 0.55 + ((seed % 40) / 100); // alçades variables
-
-                return Flexible(
-                  child: FractionallySizedBox(
-                    heightFactor: heightFactor,
-                    child: Container(
-                      margin: const EdgeInsets.symmetric(horizontal: 1.2),
-                      decoration: BoxDecoration(
-                        color: color,
-                        borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
-                        border: Border.all(
-                          color: AppColors.accent.withAlpha(80),
-                          width: 0.6,
+            child: isShelfEmpty
+                ? (showPlant
+                    ? Align(
+                        alignment: Alignment.bottomRight,
+                        child: Padding(
+                          padding: const EdgeInsets.only(right: 12.0),
+                          child: _buildMiniPlant(),
                         ),
-                      ),
-                    ),
+                      )
+                    : const SizedBox.shrink())
+                : Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Llibres rectes
+                      ...List.generate(straightSpinesCount, (bIndex) {
+                        final seed = (shelfIndex * 13 + bIndex * 7 + unit.name.length) % 100;
+                        final color = _spineColors[seed % _spineColors.length];
+                        final heightFactor = 0.55 + ((seed % 40) / 100); // alçades variables
+
+                        return Flexible(
+                          child: FractionallySizedBox(
+                            heightFactor: heightFactor,
+                            child: Container(
+                              margin: const EdgeInsets.symmetric(horizontal: 1.2),
+                              decoration: BoxDecoration(
+                                color: color,
+                                borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                                border: Border.all(
+                                  color: AppColors.accent.withAlpha(80),
+                                  width: 0.6,
+                                ),
+                              ),
+                            ),
+                          ),
+                        );
+                      }),
+
+                      // Llibre artesanal inclinat en diagonal (efecte llibreria viva)
+                      if (hasLeaningBook)
+                        Flexible(
+                          child: FractionallySizedBox(
+                            heightFactor: 0.72,
+                            child: Transform.rotate(
+                              key: const Key('leaning_book_decoration'),
+                              angle: 0.20,
+                              alignment: Alignment.bottomLeft,
+                              child: Container(
+                                margin: const EdgeInsets.symmetric(horizontal: 1.2),
+                                decoration: BoxDecoration(
+                                  color: _spineColors[(shelfIndex * 7 + unit.name.length) % _spineColors.length],
+                                  borderRadius: const BorderRadius.vertical(top: Radius.circular(2)),
+                                  border: Border.all(
+                                    color: AppColors.accent.withAlpha(80),
+                                    width: 0.6,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+
+                      // Planteta artesanal a la balda superior
+                      if (showPlant)
+                        _buildMiniPlant(),
+                    ],
                   ),
-                );
-              }),
-            ),
           ),
         ),
 
-        // Prestatge / Base física de la balda (fusta to terra suau)
+        // Prestatge / Base física de la balda (fusta càlida to roure/beix segons AGENTS.md)
         Container(
-          height: 7,
+          height: 8,
           width: double.infinity,
           decoration: BoxDecoration(
-            color: const Color(0xFFE2D6D2),
+            color: const Color(0xFFD9C5B2), // Color fusta càlida AGENTS.md
             borderRadius: BorderRadius.circular(2),
+            border: Border.all(
+              color: const Color(0xFFCBB5A1),
+              width: 0.8,
+            ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withAlpha(20),
+                color: Colors.black.withAlpha(25),
                 blurRadius: 2,
-                offset: const Offset(0, 1),
+                offset: const Offset(0, 1.5),
               ),
             ],
           ),
         ),
       ],
+    );
+  }
+
+  /// Detall decoratiu artesanal: petita planta de terracota amb suculenta verda
+  Widget _buildMiniPlant() {
+    return Tooltip(
+      message: 'Detall artesanal',
+      child: Container(
+        key: const Key('mini_plant_decoration'),
+        margin: const EdgeInsets.only(left: 4.0, right: 2.0),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.center,
+          children: [
+            // Fulles verdes de suculenta en ventall
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Transform.rotate(
+                  angle: -0.38,
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    width: 4,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF5BA86E),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                Container(
+                  width: 4,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF439055),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                Transform.rotate(
+                  angle: 0.38,
+                  alignment: Alignment.bottomCenter,
+                  child: Container(
+                    width: 4,
+                    height: 8,
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF5BA86E),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 1),
+            // Test de terracota amb vora superior
+            Container(
+              width: 14,
+              height: 10,
+              decoration: const BoxDecoration(
+                color: Color(0xFFC86D51), // Terracota càlid
+                borderRadius: BorderRadius.vertical(
+                  bottom: Radius.circular(3),
+                  top: Radius.circular(1.5),
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black12,
+                    blurRadius: 1,
+                    offset: Offset(0, 1),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }

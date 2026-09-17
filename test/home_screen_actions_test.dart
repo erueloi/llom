@@ -102,6 +102,34 @@ void main() {
 
       expect(find.text('Nova estanteria'), findsOneWidget);
       expect(find.text('Nom del moble'), findsOneWidget);
+
+      // Close bottom sheet
+      await tester.tap(find.text('Cancel·lar'));
+      await tester.pumpAndSettle();
+    });
+
+    testWidgets('FAB Afegir estanteria hides when search query is entered and reappears when cleared', (tester) async {
+      final mockService = MockBookcaseServiceForHomeActions(bookcases: [testBookcase]);
+
+      await tester.pumpWidget(createWidget(service: mockService));
+      await tester.pumpAndSettle();
+
+      final fab = find.byKey(const Key('add_bookcase_fab'));
+      expect(fab, findsOneWidget);
+
+      // Enter search text in prominent search bar
+      await tester.enterText(find.byType(TextField), 'llibre');
+      await tester.pumpAndSettle();
+
+      // FAB must be hidden during search
+      expect(find.byKey(const Key('add_bookcase_fab')), findsNothing);
+
+      // Clear search text
+      await tester.enterText(find.byType(TextField), '');
+      await tester.pumpAndSettle();
+
+      // FAB must reappear
+      expect(find.byKey(const Key('add_bookcase_fab')), findsOneWidget);
     });
 
     testWidgets('BookcaseCard options menu shows Editar nom and Eliminar estanteria', (tester) async {

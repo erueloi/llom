@@ -755,5 +755,76 @@ void main() {
       expect(data.coverUrl, 'https://covers.openlibrary.org/b/id/554433-M.jpg');
       expect(data.pageCount, 250);
     });
+
+    test('lookupAuthorByTitle retrieves author from Google Books', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.host == 'www.googleapis.com') {
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {
+                  'volumeInfo': {
+                    'title': 'La plaça del Diamant',
+                    'authors': ['Mercè Rodoreda'],
+                  }
+                }
+              ]
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      BookEnrichmentService.clearCache();
+      final service = BookEnrichmentService(httpClient: mockClient);
+      final author = await service.lookupAuthorByTitle('La plaça del Diamant');
+
+      expect(author, 'Mercè Rodoreda');
+    });
+
+    test('lookupAuthorByTitle falls back to Open Library when Google Books has no author', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.host == 'www.googleapis.com') {
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {
+                  'volumeInfo': {
+                    'title': 'Títol Sense Autor A Google',
+                  }
+                }
+              ]
+            }),
+            200,
+          );
+        } else if (request.url.host == 'openlibrary.org') {
+          return http.Response(
+            jsonEncode({
+              'docs': [
+                {
+                  'title': 'Títol Sense Autor A Google',
+                  'author_name': ['Joan Fuster'],
+                }
+              ]
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      BookEnrichmentService.clearCache();
+      final service = BookEnrichmentService(httpClient: mockClient);
+      final author = await service.lookupAuthorByTitle('Títol Sense Autor A Google');
+
+      expect(author, 'Joan Fuster');
+    });
+
+    test('lookupAuthorByTitle returns null for empty title', () async {
+      final service = BookEnrichmentService();
+      expect(await service.lookupAuthorByTitle(''), isNull);
+      expect(await service.lookupAuthorByTitle('   '), isNull);
+    });
   });
 }

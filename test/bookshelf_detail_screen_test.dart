@@ -7,11 +7,13 @@ import 'package:llom/models/library_model.dart';
 import 'package:llom/models/user_model.dart';
 import 'package:llom/providers/library_provider.dart';
 import 'package:llom/screens/bookshelf_detail_screen.dart';
+import 'package:llom/screens/shelf_review_screen.dart';
 import 'package:llom/services/bookcase_service.dart';
 
 class MockBookcaseServiceForDetail extends BookcaseService {
   final List<BookcaseModel> bookcases;
   final List<BookModel> books;
+  int? lastClearedShelfIndex;
 
   MockBookcaseServiceForDetail({required this.bookcases, required this.books});
 
@@ -23,6 +25,11 @@ class MockBookcaseServiceForDetail extends BookcaseService {
   @override
   Stream<List<BookModel>> getBooksForBookcase(String libraryId, String bookcaseId) {
     return Stream.value(books.where((b) => b.bookcaseId == bookcaseId).toList());
+  }
+
+  @override
+  Future<void> clearShelf(String libraryId, String bookcaseId, int shelfIndex) async {
+    lastClearedShelfIndex = shelfIndex;
   }
 }
 
@@ -263,6 +270,10 @@ void main() {
       expect(find.text('Llibreria de Roure'), findsWidgets);
       expect(find.byType(InteractiveViewer), findsOneWidget);
 
+      final editDetectionBtn = find.byKey(const Key('btn_edit_shelf_detection'));
+      expect(editDetectionBtn, findsOneWidget);
+      expect(find.text('Editar detecció / Afegir llibre'), findsOneWidget);
+
       final closeBtn = find.byKey(const Key('close_shelf_photo_dialog'));
       expect(closeBtn, findsOneWidget);
 
@@ -271,6 +282,107 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.byKey(const Key('close_shelf_photo_dialog')), findsNothing);
+    });
+
+    testWidgets('Tapping Editar detecció / Afegir llibre in shelf photo viewer navigates to ShelfReviewScreen in retroactive edit mode', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final booksWithPhoto = [
+        testBooks[0].copyWith(photoUrl: 'https://example.com/shelf1.jpg'),
+        testBooks[1],
+      ];
+
+      final mockService = MockBookcaseServiceForDetail(
+        bookcases: [testBookcase],
+        books: booksWithPhoto,
+      );
+
+      await tester.pumpWidget(createWidget(service: mockService));
+      await tester.pumpAndSettle();
+
+      // Tap shelf photo button to open dialog
+      await tester.tap(find.byKey(const Key('shelf_photo_button_1')));
+      await tester.pumpAndSettle();
+
+      final editBtn = find.byKey(const Key('btn_edit_shelf_detection'));
+      expect(editBtn, findsOneWidget);
+
+      await tester.tap(editBtn);
+      await tester.pumpAndSettle();
+
+      // Verify ShelfReviewScreen opened in retroactive mode
+      expect(find.byType(ShelfReviewScreen), findsOneWidget);
+      expect(find.text('Desar canvis a la balda'), findsOneWidget);
+      expect(find.text('Edició balda 1'), findsOneWidget);
+    });
+
+    testWidgets('Tapping ghost spine opens empty shelf options sheet and provides options to capture or add manual book', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final mockService = MockBookcaseServiceForDetail(
+        bookcases: [testBookcase],
+        books: testBooks, // Balda 1 té b1, Balda 2 té b2, Balda 3 és buida
+      );
+
+      await tester.pumpWidget(createWidget(service: mockService));
+      await tester.pumpAndSettle();
+
+      // Balda 3 és buida, té ghost spine
+      final ghostSpine3 = find.byKey(const Key('ghost_spine_3'));
+      expect(ghostSpine3, findsOneWidget);
+
+      await tester.tap(ghostSpine3);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Afegir a la Balda 3'), findsOneWidget);
+      expect(find.byKey(const Key('empty_shelf_option_camera_3')), findsOneWidget);
+      expect(find.byKey(const Key('empty_shelf_option_manual_3')), findsOneWidget);
+    });
+
+    testWidgets('Shelf clear button is shown on non-empty shelf, opens confirmation dialog and clears shelf', (tester) async {
+      tester.view.physicalSize = const Size(1200, 1800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      final mockService = MockBookcaseServiceForDetail(
+        bookcases: [testBookcase],
+        books: testBooks, // Balda 1 i 2 tenen llibres, Balda 3 buida
+      );
+
+      await tester.pumpWidget(createWidget(service: mockService));
+      await tester.pumpAndSettle();
+
+      // Balda 1 té llibres -> botó de buidar visible
+      final clearBtn1 = find.byKey(const Key('shelf_clear_button_1'));
+      expect(clearBtn1, findsOneWidget);
+
+      // Balda 3 és buida -> botó de buidar NO ha de ser-hi
+      final clearBtn3 = find.byKey(const Key('shelf_clear_button_3'));
+      expect(clearBtn3, findsNothing);
+
+      // Prémer botó de buidar balda 1
+      await tester.tap(clearBtn1);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Buidar Balda 1'), findsOneWidget);
+      expect(find.text('Vols buidar la Balda 1? S\'eliminaran els 1 llibre d\'aquest prestatge.'), findsOneWidget);
+
+      // Confirmar buidat
+      final confirmBtn = find.byKey(const Key('confirm_clear_shelf_button'));
+      expect(confirmBtn, findsOneWidget);
+
+      await tester.tap(confirmBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastClearedShelfIndex, 1);
+      expect(find.text('S\'ha buidat la Balda 1.'), findsOneWidget);
     });
   });
 }

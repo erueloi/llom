@@ -7,11 +7,15 @@ class DetectedBookSpine {
   /// Coordenades normalitzades de 0 a 1000: [ymin, xmin, ymax, xmax]
   List<int> box;
 
+  /// Indica si la caixa ha estat traçada manualment per l'usuari
+  final bool isManual;
+
   DetectedBookSpine({
     required this.id,
     required this.title,
     this.author,
     required this.box,
+    this.isManual = false,
   });
 
   int get ymin => box.isNotEmpty ? box[0] : 0;
@@ -24,12 +28,14 @@ class DetectedBookSpine {
     String? title,
     String? author,
     List<int>? box,
+    bool? isManual,
   }) {
     return DetectedBookSpine(
       id: id ?? this.id,
       title: title ?? this.title,
       author: author ?? this.author,
       box: box ?? List<int>.from(this.box),
+      isManual: isManual ?? this.isManual,
     );
   }
 
@@ -38,6 +44,7 @@ class DetectedBookSpine {
       'title': title,
       'author': author,
       'box': box,
+      if (isManual) 'isManual': true,
     };
   }
 
@@ -57,17 +64,19 @@ class DetectedBookSpine {
     final title = rawTitle.isEmpty ? 'Sense títol' : rawTitle;
     final rawAuthor = (map['author'] as String?)?.trim();
     final author = (rawAuthor != null && rawAuthor.isNotEmpty) ? rawAuthor : null;
+    final isManual = map['isManual'] == true;
 
     return DetectedBookSpine(
       id: id ?? DateTime.now().microsecondsSinceEpoch.toString(),
       title: title,
       author: author,
       box: normalizedBox.sublist(0, 4),
+      isManual: isManual,
     );
   }
 
   @override
   String toString() {
-    return 'DetectedBookSpine(id: $id, title: "$title", author: "$author", box: $box)';
+    return 'DetectedBookSpine(id: $id, title: "$title", author: "$author", box: $box, isManual: $isManual)';
   }
 }

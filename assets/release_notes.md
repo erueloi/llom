@@ -1,5 +1,14 @@
 # Release Notes
 
+## v1.2.0+5
+- Reordenació interactiva de llibres a la balda (Drag & Drop) amb persistència atòmica a Cloud Firestore.
+- Eina de dibuix i marcatge manual de caixes sobre la fotografia de la balda per afegir llibres no detectats.
+- Mode d'edició retroactiva de baldes reutilitzant la foto existent a Firebase Storage per revisar, afegir o suprimir llibres.
+- Mòdul centralitzat de notificacions AppFeedback (Top Floating Pill) per a Android i Web.
+- Dibuix realista de baldes buides vs plenes i detalls artesanals (planteta de terracota i llibre inclinat) al carrusel d'estanteries.
+- Cerca millorada: preservació del text en obrir resultats i deselecció en buidar el cercador.
+- Gestió àgil de baldes buides, buidat de prestatges i autocompletat d'autor amb vareta màgica.
+- Suite de tests ampliada a 166 tests (100% èxit) i 0 advertències a flutter analyze.
 ## v1.1.0+4
 - Desplaçament horitzontal fluid amb ratolí, trackpad i pantalla tàctil a les baldes (Web i Desktop).
 - Nou visor de fotografia completa de la balda amb zoom interactiu de fins a 4x (InteractiveViewer).
@@ -29,6 +38,7 @@ Primera release de Llom amb identificació de baldes, disseny accessible i despl
 - Autenticació accessible amb Google Sign-In i correu/contrasenya.
 - Gestió multi-biblioteca amb rols (Propietari, Editor, Lector) i codis d'invitació.
 - Disseny adaptat a accessibilitat sènior amb mode de text extra gran.
+
 
 
 

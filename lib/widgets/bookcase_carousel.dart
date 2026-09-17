@@ -10,6 +10,7 @@ class BookcaseCarousel extends StatefulWidget {
   final ValueChanged<ShelfUnit>? onDeleteUnit;
   final bool canEdit;
   final int initialPage;
+  final Map<String, List<int>>? shelfBookCountsMap;
 
   const BookcaseCarousel({
     super.key,
@@ -19,6 +20,7 @@ class BookcaseCarousel extends StatefulWidget {
     this.onDeleteUnit,
     this.canEdit = true,
     this.initialPage = 0,
+    this.shelfBookCountsMap,
   });
 
   @override
@@ -130,6 +132,7 @@ class _BookcaseCarouselState extends State<BookcaseCarousel> {
                       unit: unit,
                       isFocused: isCenter,
                       canEdit: widget.canEdit,
+                      shelfBookCounts: widget.shelfBookCountsMap?[unit.id],
                       onEdit: widget.onEditUnit != null ? () => widget.onEditUnit!(unit) : null,
                       onDelete: widget.onDeleteUnit != null ? () => widget.onDeleteUnit!(unit) : null,
                       onTap: () {
