@@ -1,5 +1,9 @@
 # Release Notes
 
+## v1.2.2+7
+- Resolució de l'error d'autenticació Database is closing/hidden amb Google a tauletes i mòbils Web.
+- Actualització del Firebase Web SDK a la versió oficial 12.19.0 amb reconnexió automàtica d'IndexedDB.
+- Capa de recuperació resilient per a Google Sign-In i missatgeria d'errors amigable en català.
 ## v1.2.1+6
 - Nova pantalla d'Estadístiques de la Biblioteca (LibraryStatsScreen) amb mètriques totals, rànquing d'autors i distribució per dècades.
 - Sistema de préstecs ampliat amb xips de contactes habituals, selector de dates i historial complet de préstecs anteriors (LoanRecord).
@@ -46,6 +50,7 @@ Primera release de Llom amb identificació de baldes, disseny accessible i despl
 - Autenticació accessible amb Google Sign-In i correu/contrasenya.
 - Gestió multi-biblioteca amb rols (Propietari, Editor, Lector) i codis d'invitació.
 - Disseny adaptat a accessibilitat sènior amb mode de text extra gran.
+
 
 
 

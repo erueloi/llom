@@ -1028,6 +1028,20 @@
   * Actualitzats i ampliats [test/bookcase_test.dart](file:///c:/git/llom/test/bookcase_test.dart), [test/bookcase_carousel_test.dart](file:///c:/git/llom/test/bookcase_carousel_test.dart), [test/bookshelf_detail_screen_test.dart](file:///c:/git/llom/test/bookshelf_detail_screen_test.dart) i [test/home_screen_actions_test.dart](file:///c:/git/llom/test/home_screen_actions_test.dart).
   * **197 de 197 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
 
+### ✅ Tasca 51: Resolució de l'error «Database is closing/hidden» a Google Sign-In a tauletes i mòbils (Web)
+- [x] Diagnòstic de la causa arrel:
+  * El Firebase JS SDK versió 12.17.0 (empaquetat per defecte a la versió anterior) tancava la connexió d'IndexedDB en detectar l'esdeveniment `visibilitychange` (`hidden`) en obrir el popup d'inici de sessió amb Google a Chrome en tauletes i dispositius mòbils.
+  * Quan el popup es tancava i retornava el token, la pestanya principal intentava desar la sessió a un IndexedDB tancat, llançant l'error `Database is closing/hidden`.
+- [x] Actualització de versions de Firebase Web SDK:
+  * Eliminat l'override rígid de `firebase_core_web: 3.10.0` a [pubspec.yaml](file:///c:/git/llom/pubspec.yaml).
+  * Actualitzat `firebase_core` a `^4.15.0` i `firebase_core_web` a `3.12.0`, el qual té com a objectiu natiu el Firebase JS SDK `12.19.0`.
+  * Afegit a [web/index.html](file:///c:/git/llom/web/index.html) el control explícit `<script>window.flutterfire_web_sdk_version = '12.19.0';</script>` per garantir la càrrega del JS SDK 12.19.0 (que conté el pedaç oficial de reconnexió automàtica d'IndexedDB i fallback en memòria segons el GitHub issue #10318 de Firebase).
+- [x] Capa de recuperació resilient i missatgeria amigable en català:
+  * A [lib/services/auth_service.dart](file:///c:/git/llom/lib/services/auth_service.dart), en cas de detectar un error d'IndexedDB `closing/hidden`, s'aplica una pausa de 600 ms, es comprova si l'usuari ja s'ha autenticat en segon pla (`_auth.currentUser`) per completar l'accés sense errors, o es reintenta amb la connexió restablerta.
+  * A [lib/screens/auth_screen.dart](file:///c:/git/llom/lib/screens/auth_screen.dart), traducció de qualsevol incidència de tancament de magatzem a un missatge entenedor en català («La connexió d'emmagatzematge del navegador s'ha tancat temporalment...»).
+- [x] Verificacions i qualitat:
+  * **197 de 197 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
 ---
 
 ## 🚀 Propers Passos

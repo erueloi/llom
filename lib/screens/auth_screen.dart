@@ -117,9 +117,16 @@ class _AuthScreenState extends State<AuthScreen> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() {
-          _errorMessage = "S'ha produït un error inesperat: ${e.toString()}";
-        });
+        final errStr = e.toString().toLowerCase();
+        if (errStr.contains('database is closing') || errStr.contains('closing/hidden')) {
+          setState(() {
+            _errorMessage = "La connexió d'emmagatzematge del navegador s'ha tancat temporalment. Si us plau, torna a prémer el botó per accedir.";
+          });
+        } else {
+          setState(() {
+            _errorMessage = "S'ha produït un error inesperat: ${e.toString()}";
+          });
+        }
       }
     } finally {
       if (mounted) {

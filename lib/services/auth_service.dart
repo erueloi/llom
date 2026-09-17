@@ -129,13 +129,38 @@ class AuthService {
   /// Inicia sessió o registra l'usuari mitjançant Google Sign-In
   Future<UserModel> signInWithGoogle() async {
     try {
-      UserCredential userCredential;
+      User? user;
 
       if (kIsWeb) {
         final GoogleAuthProvider googleProvider = GoogleAuthProvider();
         googleProvider.addScope('email');
         googleProvider.addScope('profile');
-        userCredential = await _auth.signInWithPopup(googleProvider);
+
+        try {
+          final userCredential = await _auth.signInWithPopup(googleProvider);
+          user = userCredential.user;
+        } catch (e) {
+          final errStr = e.toString().toLowerCase();
+          final isDbClosing = errStr.contains('database is closing') ||
+              errStr.contains('closing/hidden');
+
+          if (isDbClosing) {
+            // Quan la finestra de Google popup es tanca en tauletes o mòbils,
+            // la pestanya principal recupera la visibilitat i IndexedDB es reobre.
+            await Future.delayed(const Duration(milliseconds: 600));
+
+            // Comprovem si la sessió s'ha sincronitzat malgrat l'avís de tancament
+            user = _auth.currentUser;
+
+            // Si encara no està disponible, fem un segon intent net amb IndexedDB reobert
+            if (user == null) {
+              final userCredential = await _auth.signInWithPopup(googleProvider);
+              user = userCredential.user;
+            }
+          } else {
+            rethrow;
+          }
+        }
       } else {
         final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
         if (googleUser == null) {
@@ -152,46 +177,17 @@ class AuthService {
           idToken: googleAuth.idToken,
         );
 
-        userCredential = await _auth.signInWithCredential(credential);
+        final userCredential = await _auth.signInWithCredential(credential);
+        user = userCredential.user;
       }
 
-      final user = userCredential.user;
       if (user == null) {
         throw const AuthException(
           "No s'ha pogut obtenir la informació de l'usuari de Google.",
         );
       }
 
-      // Comprovem si el document users/{uid} ja existeix a Firestore
-      final userDoc = await _firestore.collection('users').doc(user.uid).get();
-
-      if (userDoc.exists && userDoc.data() != null) {
-        // Usuari recurrent: respectem el seu activeLibraryId existent
-        final existing = UserModel.fromMap(userDoc.data()!, user.uid);
-        if (user.photoURL != null && existing.photoUrl != user.photoURL) {
-          final updated = existing.copyWith(photoUrl: user.photoURL);
-          await _firestore.collection('users').doc(user.uid).set(
-            {'photoUrl': user.photoURL},
-            SetOptions(merge: true),
-          );
-          return updated;
-        }
-        return existing;
-      } else {
-        // Nou registre amb Google
-        final now = DateTime.now();
-        final newUser = UserModel(
-          uid: user.uid,
-          email: user.email ?? '',
-          displayName: user.displayName ?? '',
-          photoUrl: user.photoURL,
-          activeLibraryId: null,
-          createdAt: now,
-        );
-
-        await _firestore.collection('users').doc(user.uid).set(newUser.toMap());
-        return newUser;
-      }
+      return await _syncGoogleUser(user);
     } on FirebaseAuthException catch (e) {
       if (e.code == 'popup-closed-by-user' || e.code == 'canceled') {
         throw const AuthException(
@@ -202,9 +198,49 @@ class AuthService {
       throw AuthException(_mapFirebaseAuthError(e), code: e.code);
     } catch (e) {
       if (e is AuthException) rethrow;
+      final errStr = e.toString().toLowerCase();
+      if (errStr.contains('database is closing') || errStr.contains('closing/hidden')) {
+        throw const AuthException(
+          "La connexió d'emmagatzematge del navegador s'ha tancat temporalment en obrir la finestra d'autenticació. Si us plau, torna a prémer el botó per accedir.",
+          code: 'database-closing',
+        );
+      }
       throw AuthException(
         "S'ha produït un error en iniciar sessió amb Google: ${e.toString()}",
       );
+    }
+  }
+
+  /// Sincronitza l'usuari autenticat amb Google a la col·lecció 'users' de Firestore
+  Future<UserModel> _syncGoogleUser(User user) async {
+    final userDoc = await _firestore.collection('users').doc(user.uid).get();
+
+    if (userDoc.exists && userDoc.data() != null) {
+      // Usuari recurrent: respectem el seu activeLibraryId existent
+      final existing = UserModel.fromMap(userDoc.data()!, user.uid);
+      if (user.photoURL != null && existing.photoUrl != user.photoURL) {
+        final updated = existing.copyWith(photoUrl: user.photoURL);
+        await _firestore.collection('users').doc(user.uid).set(
+          {'photoUrl': user.photoURL},
+          SetOptions(merge: true),
+        );
+        return updated;
+      }
+      return existing;
+    } else {
+      // Nou registre amb Google
+      final now = DateTime.now();
+      final newUser = UserModel(
+        uid: user.uid,
+        email: user.email ?? '',
+        displayName: user.displayName ?? '',
+        photoUrl: user.photoURL,
+        activeLibraryId: null,
+        createdAt: now,
+      );
+
+      await _firestore.collection('users').doc(user.uid).set(newUser.toMap());
+      return newUser;
     }
   }
 
