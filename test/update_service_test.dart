@@ -87,4 +87,28 @@ void main() {
       expect(updateInfo, isNull);
     });
   });
+
+  group('UpdateService.formatVersionDisplay and getLocalVersion', () {
+    test('formatVersionDisplay formats semver and build correctly', () {
+      expect(UpdateService.formatVersionDisplay('1.2.2+7'), '1.2.2 (v7)');
+      expect(UpdateService.formatVersionDisplay('v1.2.2+7'), '1.2.2 (v7)');
+      expect(UpdateService.formatVersionDisplay('1.0.0'), '1.0.0');
+      expect(UpdateService.formatVersionDisplay(''), '1.2.2 (v7)');
+    });
+
+    test('getLocalVersion respects localVersionOverride and formats display', () async {
+      final service = UpdateService(localVersionOverride: '1.2.2+7');
+      final version = await service.getLocalVersion();
+      expect(version, '1.2.2+7');
+
+      final display = await service.getLocalVersionDisplay();
+      expect(display, '1.2.2 (v7)');
+    });
+
+    testWidgets('getVersionFromReleaseNotes extracts latest version from assets', (tester) async {
+      final version = await UpdateService.getVersionFromReleaseNotes();
+      expect(version, isNotEmpty);
+      expect(version, matches(RegExp(r'^[0-9]+\.[0-9]+\.[0-9]+\+[0-9]+$')));
+    });
+  });
 }

@@ -1,5 +1,15 @@
 # Release Notes
 
+## v1.3.0+8
+Resolució de la versió estàtica a la pantalla de perfil mostrant la versió real dinàmica.
+Indicadors visuals i píndoles de salt per a llibres coincidents no visibles a les baldes.
+Auto-scroll suau al primer llibre coincident en entrar a l'estanteria.
+Redisseny de la targeta de cerca (BookCard) aprofitant el 100% de l'amplada a mòbils.
+Unificació del botó d'estadístiques i comptador de llibres a la capçalera per evitar sobreposicions a mòbil.
+Fallback de sinopsi assistida amb Google Gemini Flash (IA) i suport per a Gemini 3.
+Captura i pujada manual de portada des de càmera o galeria a Firebase Storage.
+Resolució del bug d'actualització de metadades i portades en editar un llibre.
+Suite ampliada a 213 tests (100% èxit).
 ## v1.2.2+7
 - Resolució de l'error d'autenticació Database is closing/hidden amb Google a tauletes i mòbils Web.
 - Actualització del Firebase Web SDK a la versió oficial 12.19.0 amb reconnexió automàtica d'IndexedDB.
@@ -50,6 +60,7 @@ Primera release de Llom amb identificació de baldes, disseny accessible i despl
 - Autenticació accessible amb Google Sign-In i correu/contrasenya.
 - Gestió multi-biblioteca amb rols (Propietari, Editor, Lector) i codis d'invitació.
 - Disseny adaptat a accessibilitat sènior amb mode de text extra gran.
+
 
 
 

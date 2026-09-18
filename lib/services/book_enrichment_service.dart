@@ -1,8 +1,11 @@
 import 'dart:convert';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_storage/firebase_storage.dart';
 import 'package:flutter/foundation.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
 import 'package:http/http.dart' as http;
 import '../models/book_model.dart';
+import 'shelf_vision_service.dart';
 
 /// Dades d'enriquiment recuperades de Google Books o Open Library
 class BookEnrichmentData {
@@ -55,10 +58,19 @@ class BookEnrichmentData {
       infoUrl.hashCode;
 }
 
+typedef AiSynopsisGenerator = Future<String?> Function({
+  required String title,
+  String? author,
+  int? year,
+});
+
 /// Servei per consultar les APIs de Google Books i Open Library per enriquir la informació dels llibres
 class BookEnrichmentService {
   final http.Client _httpClient;
   final FirebaseFirestore? _firestore;
+  final FirebaseStorage? _storage;
+  final GenerativeModel? _generativeModel;
+  final AiSynopsisGenerator? _aiSynopsisGenerator;
   final String _googleBooksApiKey;
 
   static final Map<String, BookEnrichmentData> _cache = {};
@@ -66,10 +78,16 @@ class BookEnrichmentService {
   BookEnrichmentService({
     http.Client? httpClient,
     FirebaseFirestore? firestore,
+    FirebaseStorage? storage,
+    GenerativeModel? generativeModel,
+    AiSynopsisGenerator? aiSynopsisGenerator,
     String? apiKey,
     String? googleBooksApiKey,
   })  : _httpClient = httpClient ?? http.Client(),
         _firestore = firestore,
+        _storage = storage,
+        _generativeModel = generativeModel,
+        _aiSynopsisGenerator = aiSynopsisGenerator,
         _googleBooksApiKey = (googleBooksApiKey ??
                 apiKey ??
                 const String.fromEnvironment('GOOGLE_BOOKS_API_KEY'))
@@ -341,7 +359,7 @@ class BookEnrichmentService {
     final queryParams = {
       'title': cleanTitle,
       if (cleanAuthor.isNotEmpty) 'author': cleanAuthor,
-      'limit': '1',
+      'limit': '5',
     };
 
     final url = Uri.https('openlibrary.org', '/search.json', queryParams);
@@ -360,26 +378,39 @@ class BookEnrichmentService {
         return null;
       }
 
-      final doc = docs.first as Map<String, dynamic>;
-      final authorsList = doc['author_name'] as List<dynamic>?;
-      final authorName = (authorsList != null && authorsList.isNotEmpty)
-          ? authorsList.first.toString().trim()
-          : null;
+      String? authorName;
+      String? coverUrl;
+      String? firstPublishYear;
+      int? pageCount;
+      String? workKey;
+      String? infoUrl;
 
-      final coverI = doc['cover_i'];
-      final coverUrl = coverI != null
-          ? 'https://covers.openlibrary.org/b/id/$coverI-M.jpg'
-          : null;
+      // Iterem sobre els resultats per trobar la millor combinació de portada i metadades
+      for (final rawDoc in docs) {
+        if (rawDoc is! Map<String, dynamic>) continue;
 
-      final firstPublishYear = doc['first_publish_year']?.toString();
-      final pageCount = (doc['number_of_pages_median'] as num?)?.toInt();
+        if (authorName == null) {
+          final authorsList = rawDoc['author_name'] as List<dynamic>?;
+          if (authorsList != null && authorsList.isNotEmpty) {
+            authorName = authorsList.first.toString().trim();
+          }
+        }
 
-      final rawKey = doc['key'] as String?;
-      final workKey = (rawKey != null && rawKey.startsWith('/works/'))
-          ? rawKey
-          : (rawKey != null ? '/works/$rawKey' : null);
+        if (coverUrl == null && rawDoc['cover_i'] != null) {
+          final coverI = rawDoc['cover_i'];
+          coverUrl = 'https://covers.openlibrary.org/b/id/$coverI-M.jpg';
+        }
 
-      final infoUrl = workKey != null
+        firstPublishYear ??= rawDoc['first_publish_year']?.toString();
+        pageCount ??= (rawDoc['number_of_pages_median'] as num?)?.toInt();
+
+        if (workKey == null && rawDoc['key'] is String) {
+          final rawKey = rawDoc['key'] as String;
+          workKey = rawKey.startsWith('/works/') ? rawKey : '/works/$rawKey';
+        }
+      }
+
+      infoUrl = workKey != null
           ? 'https://openlibrary.org$workKey'
           : 'https://openlibrary.org/search?q=${Uri.encodeComponent('$cleanTitle $cleanAuthor'.trim())}';
 
@@ -478,6 +509,125 @@ class BookEnrichmentService {
     return null;
   }
 
+  /// Llista de models candidats de Gemini per a la generació de sinopsi per ordre de preferència
+  static const List<String> candidateSynopsisModels = [
+    'gemini-flash-latest',
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
+    'gemini-3.5-flash',
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+  ];
+
+  /// Genera una sinopsi o context divulgatiu concís mitjançant Gemini Flash
+  /// quan Google Books i Open Library no disposen de descripció
+  Future<String?> generateAiSynopsis({
+    required String title,
+    String? author,
+    int? year,
+    String? apiKeyOverride,
+    GenerativeModel? modelOverride,
+  }) async {
+    final cleanTitle = cleanSearchTerm(title);
+    if (cleanTitle.isEmpty) return null;
+
+    if (_aiSynopsisGenerator != null) {
+      return _aiSynopsisGenerator(
+        title: title,
+        author: author,
+        year: year,
+      );
+    }
+
+    final key = apiKeyOverride ?? await ShelfVisionService.getEffectiveApiKey();
+    if (key == null || key.trim().isEmpty) {
+      debugPrint('BookEnrichmentService: No hi ha GEMINI_API_KEY disponible per generar la sinopsi.');
+      return null;
+    }
+
+    final cleanAuthor = author != null ? cleanSearchTerm(author) : '';
+    final authorPart = cleanAuthor.isNotEmpty ? ' de \'$cleanAuthor\'' : '';
+    final yearPart = year != null ? ' ($year)' : '';
+
+    final prompt = "Ets un bibliotecari expert. Genera un resum o context divulgatiu concís (màxim 2 paràgrafs) sobre l'obra o temàtica del llibre '$cleanTitle'$authorPart$yearPart. Fes-ho en el mateix idioma del títol (català o castellà). Si és una obra molt específica o desconeguda, descriu el context temàtic que suggereix el títol sense inventar dades.";
+
+    if (modelOverride != null || _generativeModel != null) {
+      try {
+        final model = modelOverride ?? _generativeModel!;
+        final response = await model.generateContent([Content.text(prompt)]);
+        final text = response.text?.trim();
+        if (text != null && text.isNotEmpty) return cleanHtml(text);
+      } catch (e) {
+        debugPrint('BookEnrichmentService: Error generant sinopsi amb model injectat: $e');
+      }
+      return null;
+    }
+
+    // Prova la llista de models per ordre (gemini-flash-latest, gemini-3.8-flash, etc.)
+    for (final modelName in candidateSynopsisModels) {
+      try {
+        final model = GenerativeModel(
+          model: modelName,
+          apiKey: key.trim(),
+        );
+
+        final response = await model.generateContent([
+          Content.text(prompt),
+        ]);
+
+        final text = response.text?.trim();
+        if (text != null && text.isNotEmpty) {
+          return cleanHtml(text);
+        }
+      } catch (e) {
+        final errorStr = e.toString().toLowerCase();
+        // Si el model no està disponible, no és suportat o dóna 404, prova el següent
+        if (errorStr.contains('not found') ||
+            errorStr.contains('404') ||
+            errorStr.contains('not supported') ||
+            errorStr.contains('unsupported')) {
+          continue;
+        }
+        debugPrint('BookEnrichmentService: Error generant sinopsi amb $modelName: $e');
+        break;
+      }
+    }
+    return null;
+  }
+
+  /// Puja una imatge de portada a Firebase Storage al path:
+  /// covers/{libraryId}/{bookId}.jpg
+  /// i retorna la URL pública de descàrrega
+  Future<String?> uploadBookCover({
+    required String libraryId,
+    required String bookId,
+    required Uint8List imageBytes,
+    FirebaseStorage? storageOverride,
+  }) async {
+    final cleanLibId = libraryId.trim();
+    final cleanBookId = bookId.trim();
+    if (cleanLibId.isEmpty || cleanBookId.isEmpty) {
+      throw ArgumentError('libraryId i bookId són obligatoris per pujar la portada');
+    }
+
+    try {
+      final storage = storageOverride ?? _storage ?? FirebaseStorage.instance;
+      final ref = storage.ref().child('covers/$cleanLibId/$cleanBookId.jpg');
+      final metadata = SettableMetadata(
+        contentType: 'image/jpeg',
+        customMetadata: {'uploadedAt': DateTime.now().toIso8601String()},
+      );
+
+      final uploadTask = await ref.putData(imageBytes, metadata);
+      final downloadUrl = await uploadTask.ref.getDownloadURL();
+      return downloadUrl;
+    } catch (e) {
+      debugPrint('BookEnrichmentService: Error pujant portada a Firebase Storage: $e');
+      return null;
+    }
+  }
+
   /// Enriquir el llibre i desar les noves dades a Firestore si encara no estan persistides
   Future<BookModel> enrichAndPersistBook({
     required BookModel book,
@@ -511,18 +661,42 @@ class BookEnrichmentService {
       author: book.author,
     );
 
-    final newSynopsis = (force && enrichment?.synopsis != null && enrichment!.synopsis!.isNotEmpty)
+    var finalSynopsis = (force && enrichment?.synopsis != null && enrichment!.synopsis!.isNotEmpty)
         ? enrichment.synopsis
         : (hasSynopsis ? book.synopsis : (enrichment?.synopsis ?? book.synopsis));
+    var isAi = (force && enrichment?.synopsis != null && enrichment!.synopsis!.isNotEmpty)
+        ? false
+        : (hasSynopsis ? book.isAiSynopsis : false);
+
+    // Fallback de Gemini Flash si ni Google Books ni Open Library tenen sinopsi
+    if (finalSynopsis == null || finalSynopsis.trim().isEmpty) {
+      final aiSynopsis = await generateAiSynopsis(
+        title: book.title,
+        author: book.author.isNotEmpty ? book.author : enrichment?.author,
+        year: int.tryParse(enrichment?.publishedYear ?? book.publishedYear ?? ''),
+      );
+      if (aiSynopsis != null && aiSynopsis.isNotEmpty) {
+        finalSynopsis = aiSynopsis;
+        isAi = true;
+      }
+    }
+
     final newCoverUrl = (force && enrichment?.coverUrl != null && enrichment!.coverUrl!.isNotEmpty)
         ? enrichment.coverUrl
         : (hasCover ? book.coverUrl : (enrichment?.coverUrl ?? book.coverUrl));
-    final newPageCount = enrichment?.pageCount ?? book.pageCount;
-    final newPublishedYear = enrichment?.publishedYear ?? book.publishedYear;
-    final newInfoUrl = enrichment?.infoUrl ?? book.infoUrl;
+    final newPageCount = (force && enrichment?.pageCount != null)
+        ? enrichment!.pageCount
+        : (enrichment?.pageCount ?? book.pageCount);
+    final newPublishedYear = (force && enrichment?.publishedYear != null)
+        ? enrichment!.publishedYear
+        : (enrichment?.publishedYear ?? book.publishedYear);
+    final newInfoUrl = (force && enrichment?.infoUrl != null)
+        ? enrichment!.infoUrl
+        : (enrichment?.infoUrl ?? book.infoUrl);
 
     final updatedBook = book.copyWith(
-      synopsis: newSynopsis,
+      synopsis: finalSynopsis,
+      isAiSynopsis: isAi,
       coverUrl: newCoverUrl,
       pageCount: newPageCount,
       publishedYear: newPublishedYear,
@@ -536,11 +710,14 @@ class BookEnrichmentService {
         final firestoreInstance = _firestore ?? FirebaseFirestore.instance;
         final updateMap = <String, dynamic>{
           'enrichmentAttempts': nextAttempts,
-          if (!hasSynopsis && newSynopsis != null) 'synopsis': newSynopsis,
-          if (!hasCover && newCoverUrl != null) 'coverUrl': newCoverUrl,
-          if (book.pageCount == null && newPageCount != null) 'pageCount': newPageCount,
-          if (book.publishedYear == null && newPublishedYear != null) 'publishedYear': newPublishedYear,
-          if (book.infoUrl == null && newInfoUrl != null) 'infoUrl': newInfoUrl,
+          if ((force || !hasSynopsis) && finalSynopsis != null) ...{
+            'synopsis': finalSynopsis,
+            'isAiSynopsis': isAi,
+          },
+          if ((force || !hasCover) && newCoverUrl != null) 'coverUrl': newCoverUrl,
+          if ((force || book.pageCount == null) && newPageCount != null) 'pageCount': newPageCount,
+          if ((force || book.publishedYear == null) && newPublishedYear != null) 'publishedYear': newPublishedYear,
+          if ((force || book.infoUrl == null) && newInfoUrl != null) 'infoUrl': newInfoUrl,
         };
 
         await firestoreInstance

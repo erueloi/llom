@@ -1,4 +1,6 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../core/feedback/app_feedback.dart';
 import '../core/theme/app_colors.dart';
 import '../models/book_model.dart';
@@ -107,6 +109,10 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
   bool _isSearchingAuthor = false;
   String? _errorMessage;
 
+  String? _coverUrl;
+  Uint8List? _pendingCoverBytes;
+  bool _isUploadingCover = false;
+
   bool get _isEditing => widget.existingBook != null;
 
   @override
@@ -115,6 +121,7 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
     _titleController = TextEditingController(text: widget.existingBook?.title ?? '');
     _authorController = TextEditingController(text: widget.existingBook?.author ?? '');
     _enrichmentService = widget.enrichmentService ?? BookEnrichmentService();
+    _coverUrl = widget.existingBook?.coverUrl;
 
     final maxShelves = widget.bookcase.shelfCount > 0 ? widget.bookcase.shelfCount : 1;
 
@@ -168,6 +175,131 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
     }
   }
 
+  Future<void> _promptCoverSource() async {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 5,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withAlpha(120),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              const Text(
+                'Canviar portada del llibre',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textMain,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                key: const Key('dialog_cover_source_camera'),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withAlpha(25),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.camera_alt_outlined, color: AppColors.primary),
+                ),
+                title: const Text('Fer foto de la portada', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Utilitza la càmera del dispositiu'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _pickCoverImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                key: const Key('dialog_cover_source_gallery'),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withAlpha(25),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.photo_library_outlined, color: AppColors.primary),
+                ),
+                title: const Text('Triar de la galeria', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Selecciona una imatge desada'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _pickCoverImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickCoverImage(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 600,
+        imageQuality: 80,
+      );
+      if (pickedFile == null) return;
+
+      final bytes = await pickedFile.readAsBytes();
+
+      if (_isEditing && widget.existingBook!.id.isNotEmpty) {
+        setState(() {
+          _isUploadingCover = true;
+        });
+
+        final downloadUrl = await _enrichmentService.uploadBookCover(
+          libraryId: widget.libraryId,
+          bookId: widget.existingBook!.id,
+          imageBytes: bytes,
+        );
+
+        if (downloadUrl != null && mounted) {
+          setState(() {
+            _coverUrl = downloadUrl;
+            _pendingCoverBytes = bytes;
+            _isUploadingCover = false;
+          });
+          AppFeedback.showSuccess(context, 'Portada actualitzada correctament!');
+        } else if (mounted) {
+          setState(() {
+            _isUploadingCover = false;
+          });
+          AppFeedback.showError(context, 'No s\'ha pogut pujar la portada.');
+        }
+      } else {
+        // En mode creació, guardem els bytes per pujar-los en desar
+        setState(() {
+          _pendingCoverBytes = bytes;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isUploadingCover = false;
+        });
+        AppFeedback.showError(context, 'Error en seleccionar la portada: $e');
+      }
+    }
+  }
+
   @override
   void dispose() {
     _titleController.dispose();
@@ -194,11 +326,23 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
       final service = widget.bookcaseService ?? BookcaseService();
 
       if (_isEditing) {
-        final updatedBook = widget.existingBook!.copyWith(
+        final titleChanged = title != widget.existingBook!.title.trim() ||
+            author != widget.existingBook!.author.trim();
+
+        final baseBook = titleChanged
+            ? widget.existingBook!.resetEnrichment()
+            : widget.existingBook!;
+
+        final effectiveCoverUrl = titleChanged && _pendingCoverBytes == null
+            ? null
+            : _coverUrl;
+
+        final updatedBook = baseBook.copyWith(
           title: title,
           author: author,
           shelfCode: '$cleanBookcaseId-B$_selectedShelf',
           bookcaseId: cleanBookcaseId,
+          coverUrl: effectiveCoverUrl,
         );
 
         final savedBook = await service.updateBook(
@@ -206,6 +350,15 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
           updatedBook,
           oldBookcaseId: widget.existingBook!.bookcaseId,
         );
+
+        // Si el títol o autor han canviat, engeguem l'enriquiment en segon pla per al nou títol
+        if (titleChanged) {
+          _enrichmentService.enrichAndPersistBook(
+            book: savedBook,
+            libraryId: widget.libraryId,
+            force: true,
+          );
+        }
 
         if (mounted) {
           AppFeedback.showSuccess(context, 'Llibre "$title" actualitzat correctament!');
@@ -222,7 +375,25 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
           createdAt: DateTime.now(),
         );
 
-        final savedBook = await service.addBook(widget.libraryId, newBook);
+        var savedBook = await service.addBook(widget.libraryId, newBook);
+
+        if (_pendingCoverBytes != null && savedBook.id.isNotEmpty) {
+          try {
+            final uploadedUrl = await _enrichmentService.uploadBookCover(
+              libraryId: widget.libraryId,
+              bookId: savedBook.id,
+              imageBytes: _pendingCoverBytes!,
+            );
+            if (uploadedUrl != null) {
+              savedBook = await service.updateBook(
+                widget.libraryId,
+                savedBook.copyWith(coverUrl: uploadedUrl),
+              );
+            }
+          } catch (e) {
+            debugPrint('Error pujant portada del nou llibre: $e');
+          }
+        }
 
         if (mounted) {
           AppFeedback.showSuccess(context, 'Llibre "$title" afegit a la balda $_selectedShelf!');
@@ -314,7 +485,85 @@ class _AddEditBookBottomSheetState extends State<AddEditBookBottomSheet> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 16),
+
+                // Portada del llibre (interactiva)
+                Center(
+                  child: Stack(
+                    clipBehavior: Clip.none,
+                    alignment: Alignment.bottomRight,
+                    children: [
+                      Container(
+                        width: 72,
+                        height: 104,
+                        decoration: BoxDecoration(
+                          color: AppColors.canvas,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: AppColors.accent.withAlpha(120)),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withAlpha(20),
+                              blurRadius: 4,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        clipBehavior: Clip.antiAlias,
+                        child: _pendingCoverBytes != null
+                            ? Image.memory(_pendingCoverBytes!, fit: BoxFit.cover)
+                            : (_coverUrl != null && _coverUrl!.isNotEmpty)
+                                ? Image.network(
+                                    BookEnrichmentService.getSafeDisplayCoverUrl(_coverUrl) ?? _coverUrl!,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) => const Center(
+                                      child: Icon(Icons.broken_image_rounded, color: AppColors.textMuted),
+                                    ),
+                                  )
+                                : const Center(
+                                    child: Icon(
+                                      Icons.menu_book_rounded,
+                                      size: 32,
+                                      color: AppColors.textMuted,
+                                    ),
+                                  ),
+                      ),
+                      if (_isUploadingCover)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: Colors.black.withAlpha(120),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: const Center(
+                              child: SizedBox(
+                                width: 20,
+                                height: 20,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                              ),
+                            ),
+                          ),
+                        )
+                      else
+                        Positioned(
+                          right: -6,
+                          bottom: -6,
+                          child: IconButton.filled(
+                            key: const Key('dialog_change_cover_button'),
+                            tooltip: 'Canviar portada',
+                            iconSize: 16,
+                            style: IconButton.styleFrom(
+                              backgroundColor: AppColors.primary,
+                              padding: const EdgeInsets.all(6),
+                              minimumSize: const Size(28, 28),
+                            ),
+                            onPressed: _promptCoverSource,
+                            icon: const Icon(Icons.camera_alt_outlined, color: Colors.white),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
 
                 // Camp Títol (obligatori)
                 const Text(

@@ -102,6 +102,8 @@ Retorna exclusivament l'esquema: { "books": [ { "title": string, "author": strin
   /// Llista de models candidats per ordre de preferència
   static const List<String> candidateModels = [
     'gemini-flash-latest',
+    'gemini-3.8-flash',
+    'gemini-3.7-flash',
     'gemini-3.6-flash',
     'gemini-3.5-flash',
     'gemini-2.5-flash',
@@ -150,9 +152,12 @@ Retorna exclusivament l'esquema: { "books": [ { "title": string, "author": strin
         return parseGeminiResponse(rawText);
       } catch (e) {
         lastError = e;
-        final errorStr = e.toString();
-        // Si és un error de model no trobat (404), prova el següent model candidat
-        if (errorStr.contains('not found') || errorStr.contains('404')) {
+        final errorStr = e.toString().toLowerCase();
+        // Si és un error de model no trobat (404) o no suportat, prova el següent model candidat
+        if (errorStr.contains('not found') ||
+            errorStr.contains('404') ||
+            errorStr.contains('not supported') ||
+            errorStr.contains('unsupported')) {
           continue;
         }
         // Si és un altre tipus d'error (429 exhaurit, 403 clau invàlida, etc.), atura't

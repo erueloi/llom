@@ -194,7 +194,104 @@ void main() {
       expect(authorFormField.controller!.text, 'Mercè Rodoreda');
       expect(find.text('S\'ha trobat l\'autor/a: "Mercè Rodoreda"'), findsOneWidget);
     });
+
+    testWidgets('Editing book title resets old enrichment metadata and triggers background enrichment', (tester) async {
+      final mockService = MockBookcaseServiceForEditBook();
+      final mockEnrichment = MockEnrichmentServiceForEditBook();
+
+      final existingBook = BookModel(
+        id: 'book_edit_test',
+        title: 'Sense títol',
+        author: 'Desconegut',
+        shelfCode: 'bc_test_1-B1',
+        bookcaseId: 'bc_test_1',
+        positionIndex: 1,
+        synopsis: 'Sinopsi vella del llibre erroni',
+        coverUrl: 'https://example.com/old_cover.jpg',
+        pageCount: 238,
+        publishedYear: '2007',
+        enrichmentAttempts: 3,
+        createdAt: DateTime.now(),
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          home: Scaffold(
+            body: Builder(
+              builder: (context) {
+                return ElevatedButton(
+                  onPressed: () {
+                    showEditBookBottomSheet(
+                      context,
+                      libraryId: 'lib_1',
+                      bookcase: testBookcase,
+                      book: existingBook,
+                      bookcaseService: mockService,
+                      enrichmentService: mockEnrichment,
+                    );
+                  },
+                  child: const Text('Editar'),
+                );
+              },
+            ),
+          ),
+        ),
+      );
+
+      await tester.tap(find.text('Editar'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Editar llibre'), findsOneWidget);
+
+      // Canviem el títol a Manifesto Comunista i autor a Karl Marx
+      await tester.enterText(find.byKey(const Key('book_title_field')), 'Manifesto Comunista');
+      await tester.enterText(find.byKey(const Key('book_author_field')), 'Karl Marx');
+
+      await tester.tap(find.byKey(const Key('submit_book_button')));
+      await tester.pumpAndSettle();
+
+      expect(mockService.lastUpdatedBook, isNotNull);
+      expect(mockService.lastUpdatedBook!.title, 'Manifesto Comunista');
+      expect(mockService.lastUpdatedBook!.author, 'Karl Marx');
+      // Metadades antigues han d'haver estat netejades
+      expect(mockService.lastUpdatedBook!.synopsis, isNull);
+      expect(mockService.lastUpdatedBook!.coverUrl, isNull);
+      expect(mockService.lastUpdatedBook!.pageCount, isNull);
+      expect(mockService.lastUpdatedBook!.publishedYear, isNull);
+      expect(mockService.lastUpdatedBook!.enrichmentAttempts, 0);
+
+      // S'ha disparat l'enriquiment en segon pla per al nou títol
+      expect(mockEnrichment.lastEnrichedBook, isNotNull);
+      expect(mockEnrichment.lastEnrichedBook!.title, 'Manifesto Comunista');
+      expect(mockEnrichment.lastForce, isTrue);
+    });
   });
+}
+
+class MockBookcaseServiceForEditBook extends BookcaseService {
+  BookModel? lastUpdatedBook;
+
+  @override
+  Future<BookModel> updateBook(String libraryId, BookModel book, {String? oldBookcaseId}) async {
+    lastUpdatedBook = book;
+    return book;
+  }
+}
+
+class MockEnrichmentServiceForEditBook extends BookEnrichmentService {
+  BookModel? lastEnrichedBook;
+  bool lastForce = false;
+
+  @override
+  Future<BookModel> enrichAndPersistBook({
+    required BookModel book,
+    required String libraryId,
+    bool force = false,
+  }) async {
+    lastEnrichedBook = book;
+    lastForce = force;
+    return book;
+  }
 }
 
 class MockBookEnrichmentServiceForAuthor extends BookEnrichmentService {

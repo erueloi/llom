@@ -25,6 +25,34 @@ class ProfileScreen extends StatefulWidget {
 }
 
 class _ProfileScreenState extends State<ProfileScreen> {
+  String _versionDisplay = '1.2.2 (v7)';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadAppVersion();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProfileScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.updateService != oldWidget.updateService) {
+      _loadAppVersion();
+    }
+  }
+
+  Future<void> _loadAppVersion() async {
+    final service = widget.updateService ?? UpdateService();
+    try {
+      final v = await service.getLocalVersionDisplay();
+      if (mounted && v.isNotEmpty) {
+        setState(() {
+          _versionDisplay = v;
+        });
+      }
+    } catch (_) {}
+  }
+
   String _getInitialLetter(UserModel? user, User? fbUser) {
     final name = user?.displayName ?? fbUser?.displayName ?? '';
     if (name.trim().isNotEmpty) {
@@ -506,9 +534,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   borderRadius: BorderRadius.circular(10),
                                   border: Border.all(color: AppColors.accent.withAlpha(80)),
                                 ),
-                                child: const Text(
-                                  '1.0.0 (v1)',
-                                  style: TextStyle(
+                                child: Text(
+                                  _versionDisplay,
+                                  key: const Key('profile_app_version_text'),
+                                  style: const TextStyle(
                                     fontSize: 14,
                                     fontWeight: FontWeight.bold,
                                     color: AppColors.textMuted,

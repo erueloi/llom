@@ -6,6 +6,7 @@ import '../core/feedback/app_feedback.dart';
 import '../core/theme/app_colors.dart';
 import '../models/book_model.dart';
 import '../models/bookcase_model.dart';
+import '../models/library_model.dart';
 import '../models/shelf_unit_model.dart';
 import '../providers/library_provider.dart';
 import '../services/bookcase_service.dart';
@@ -277,6 +278,80 @@ class _HomeScreenState extends State<HomeScreen> {
     showLibrarySelectorSheet(context);
   }
 
+  Widget _buildStatsAndBadgeAction(
+    BuildContext context, {
+    required LibraryModel? activeLibrary,
+    required int totalBooks,
+  }) {
+    void openStats() {
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => LibraryStatsScreen(
+            libraryId: activeLibrary?.id,
+            libraryName: activeLibrary?.name ?? 'La teva biblioteca',
+            initialBooks: activeLibrary == null ? MockData.mockBooks : null,
+            bookcaseService: _bookcaseService,
+          ),
+        ),
+      );
+    }
+
+    if (totalBooks <= 0) {
+      return IconButton(
+        key: const Key('library_stats_button'),
+        tooltip: 'Estadístiques de la biblioteca',
+        icon: const Icon(
+          Icons.insights_rounded,
+          color: AppColors.primary,
+          size: 24,
+        ),
+        onPressed: openStats,
+      );
+    }
+
+    return Center(
+      child: Tooltip(
+        message: 'Estadístiques de la biblioteca ($totalBooks ${totalBooks == 1 ? 'llibre' : 'llibres'})',
+        child: InkWell(
+          key: const Key('library_stats_button'),
+          onTap: openStats,
+          borderRadius: BorderRadius.circular(20),
+          child: Container(
+            key: const Key('book_count_badge'),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+            decoration: BoxDecoration(
+              color: AppColors.accent.withAlpha(50),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: AppColors.accent.withAlpha(100),
+                width: 1.2,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.insights_rounded,
+                  color: AppColors.primary,
+                  size: 16,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  '$totalBooks ${totalBooks == 1 ? 'llibre' : 'llibres'}',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.primaryDark,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isSearching = _searchQuery.isNotEmpty;
@@ -302,111 +377,58 @@ class _HomeScreenState extends State<HomeScreen> {
         scrolledUnderElevation: 0,
         elevation: 0,
         titleSpacing: 16,
-        title: Row(
-          children: [
-            InkWell(
-              onTap: () => _showLibrarySelectorSheet(context),
-              borderRadius: BorderRadius.circular(14),
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      activeLibrary?.name ?? 'Llom',
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        color: AppColors.textMain,
-                        letterSpacing: -0.5,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
+        title: InkWell(
+          onTap: () => _showLibrarySelectorSheet(context),
+          borderRadius: BorderRadius.circular(14),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    activeLibrary?.name ?? 'Llom',
+                    style: const TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w900,
+                      color: AppColors.textMain,
+                      letterSpacing: -0.5,
                     ),
-                    const SizedBox(width: 4),
-                    const Icon(
-                      Icons.keyboard_arrow_down_rounded,
-                      color: AppColors.primary,
-                      size: 26,
-                    ),
-                  ],
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
+                const SizedBox(width: 4),
+                const Icon(
+                  Icons.keyboard_arrow_down_rounded,
+                  color: AppColors.primary,
+                  size: 26,
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            if (activeLibrary != null && activeLibrary.id.isNotEmpty)
-              StreamBuilder<List<BookcaseModel>>(
-                stream: _bookcaseService.getBookcases(activeLibrary.id),
-                builder: (context, snapshot) {
-                  final bookcases = snapshot.data ?? [];
-                  final totalBooks = bookcases.fold<int>(0, (sum, b) => sum + b.bookCount);
-                  if (totalBooks == 0) return const SizedBox.shrink();
-                  return Container(
-                    key: const Key('book_count_badge'),
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                    decoration: BoxDecoration(
-                      color: AppColors.accent.withAlpha(50),
-                      borderRadius: BorderRadius.circular(20),
-                      border: Border.all(
-                        color: AppColors.accent.withAlpha(100),
-                        width: 1.2,
-                      ),
-                    ),
-                    child: Text(
-                      '$totalBooks ${totalBooks == 1 ? 'llibre' : 'llibres'}',
-                      style: const TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.w700,
-                        color: AppColors.primaryDark,
-                      ),
-                    ),
-                  );
-                },
-              )
-            else if (_totalBooksCount > 0)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
-                decoration: BoxDecoration(
-                  color: AppColors.accent.withAlpha(50),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: AppColors.accent.withAlpha(100),
-                    width: 1.2,
-                  ),
-                ),
-                child: Text(
-                  '$_totalBooksCount llibres',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.primaryDark,
-                  ),
-                ),
-              ),
-          ],
+          ),
         ),
         actions: [
-          IconButton(
-            key: const Key('library_stats_button'),
-            tooltip: 'Estadístiques de la biblioteca',
-            icon: const Icon(
-              Icons.insights_rounded,
-              color: AppColors.primary,
-              size: 24,
+          if (activeLibrary != null && activeLibrary.id.isNotEmpty)
+            StreamBuilder<List<BookcaseModel>>(
+              stream: _bookcaseService.getBookcases(activeLibrary.id),
+              builder: (context, snapshot) {
+                final bookcases = snapshot.data ?? [];
+                final totalBooks = bookcases.fold<int>(0, (sum, b) => sum + b.bookCount);
+                return _buildStatsAndBadgeAction(
+                  context,
+                  activeLibrary: activeLibrary,
+                  totalBooks: totalBooks,
+                );
+              },
+            )
+          else
+            _buildStatsAndBadgeAction(
+              context,
+              activeLibrary: activeLibrary,
+              totalBooks: _totalBooksCount,
             ),
-            onPressed: () {
-              Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => LibraryStatsScreen(
-                    libraryId: activeLibrary?.id,
-                    libraryName: activeLibrary?.name ?? 'La teva biblioteca',
-                    initialBooks: activeLibrary == null ? MockData.mockBooks : null,
-                    bookcaseService: _bookcaseService,
-                  ),
-                ),
-              );
-            },
-          ),
+          const SizedBox(width: 4),
           Padding(
             padding: const EdgeInsets.only(right: 16),
             child: InkWell(

@@ -941,10 +941,17 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
           ? '0 llibres'
           : '${books.length} ${books.length == 1 ? 'llibre' : 'llibres'}';
     }
+
     final shelfPhotoUrl = books.cast<BookModel?>().firstWhere(
       (b) => b?.photoUrl != null && b!.photoUrl!.isNotEmpty,
       orElse: () => null,
     )?.photoUrl;
+
+    final matchingCount = _searchQuery.isNotEmpty
+        ? books.where((b) =>
+            b.title.toLowerCase().contains(_searchQuery) ||
+            b.author.toLowerCase().contains(_searchQuery)).length
+        : (_highlightBookId != null && books.any((b) => b.id == _highlightBookId) ? 1 : 0);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 28),
@@ -970,13 +977,51 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
                         ),
                       ),
                       const SizedBox(height: 2),
-                      Text(
-                        subtitleText,
-                        style: const TextStyle(
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                          color: AppColors.textMuted,
-                        ),
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 8,
+                        runSpacing: 4,
+                        children: [
+                          Text(
+                            subtitleText,
+                            style: const TextStyle(
+                              fontSize: 14,
+                              fontWeight: FontWeight.w500,
+                              color: AppColors.textMuted,
+                            ),
+                          ),
+                          if (matchingCount > 0)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: AppColors.primary.withAlpha(25),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: AppColors.primary.withAlpha(80),
+                                  width: 1,
+                                ),
+                              ),
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.auto_awesome_rounded,
+                                    size: 12,
+                                    color: AppColors.primary,
+                                  ),
+                                  const SizedBox(width: 3),
+                                  Text(
+                                    '$matchingCount ${matchingCount == 1 ? 'coincident' : 'coincidents'}',
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: AppColors.primaryDark,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                        ],
                       ),
                     ],
                   ),
@@ -1055,68 +1100,22 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
           SizedBox(
             height: 195,
             child: books.isNotEmpty
-                ? ReorderableListView.builder(
-                    scrollDirection: Axis.horizontal,
-                    buildDefaultDragHandles: false,
-                    padding: const EdgeInsets.symmetric(horizontal: 4),
-                    itemCount: books.length,
-                    onReorder: (oldIdx, newIdx) {
-                      _onReorderShelfBooks(shelfNumber, oldIdx, newIdx, books);
-                    },
-                    proxyDecorator: (child, index, animation) {
-                      return AnimatedBuilder(
-                        animation: animation,
-                        builder: (context, child) {
-                          final animValue = Curves.easeInOut.transform(animation.value);
-                          final elevation = lerpDouble(0, 8, animValue) ?? 0;
-                          final scale = lerpDouble(1.0, 1.05, animValue) ?? 1.0;
-                          return Transform.scale(
-                            scale: scale,
-                            child: Material(
-                              elevation: elevation,
-                              color: Colors.transparent,
-                              shadowColor: Colors.black.withAlpha(90),
-                              child: child,
-                            ),
-                          );
-                        },
-                        child: child,
-                      );
-                    },
-                    itemBuilder: (context, bIdx) {
-                      final book = books[bIdx];
-                      final matchesQuery = _searchQuery.isNotEmpty && (
-                        book.title.toLowerCase().contains(_searchQuery) ||
-                        book.author.toLowerCase().contains(_searchQuery)
-                      );
-                      final isHighlighted = matchesQuery || (_highlightBookId != null && book.id == _highlightBookId);
-                      final isDimmed = (_searchQuery.isNotEmpty || _highlightBookId != null) && !isHighlighted;
-
-                      return ReorderableDelayedDragStartListener(
-                        key: ValueKey(book.id),
-                        index: bIdx,
-                        enabled: canEdit && _searchQuery.isEmpty && !_onlyBorrowedFilter,
-                        child: Align(
-                          alignment: Alignment.bottomCenter,
-                          child: Padding(
-                            padding: const EdgeInsets.only(right: 8),
-                            child: BookSpineWidget(
-                              book: book,
-                              displayIndex: bIdx + 1,
-                              isHighlighted: isHighlighted,
-                              isDimmed: isDimmed,
-                              onTap: () {
-                                if (_highlightBookId != null) {
-                                  setState(() {
-                                    _highlightBookId = null;
-                                  });
-                                }
-                                _showBookDetails(book, currentBookcase, canEdit);
-                              },
-                            ),
-                          ),
-                        ),
-                      );
+                ? _ShelfHorizontalBookList(
+                    shelfNumber: shelfNumber,
+                    books: books,
+                    searchQuery: _searchQuery,
+                    highlightBookId: _highlightBookId,
+                    canEdit: canEdit,
+                    onlyBorrowedFilter: _onlyBorrowedFilter,
+                    currentBookcase: currentBookcase,
+                    onReorder: _onReorderShelfBooks,
+                    onBookTap: (book, bc, editable) {
+                      if (_highlightBookId != null) {
+                        setState(() {
+                          _highlightBookId = null;
+                        });
+                      }
+                      _showBookDetails(book, bc, editable);
                     },
                   )
                 : (_onlyBorrowedFilter
@@ -1377,6 +1376,370 @@ class _BookshelfDetailScreenState extends State<BookshelfDetailScreen> {
           ],
         ),
       ),
+    );
+  }
+}
+
+class _ShelfHorizontalBookList extends StatefulWidget {
+  final int shelfNumber;
+  final List<BookModel> books;
+  final String searchQuery;
+  final String? highlightBookId;
+  final bool canEdit;
+  final bool onlyBorrowedFilter;
+  final BookcaseModel currentBookcase;
+  final void Function(int shelfNumber, int oldIndex, int newIndex, List<BookModel> books) onReorder;
+  final void Function(BookModel book, BookcaseModel bookcase, bool canEdit) onBookTap;
+
+  const _ShelfHorizontalBookList({
+    required this.shelfNumber,
+    required this.books,
+    required this.searchQuery,
+    required this.highlightBookId,
+    required this.canEdit,
+    required this.onlyBorrowedFilter,
+    required this.currentBookcase,
+    required this.onReorder,
+    required this.onBookTap,
+  });
+
+  @override
+  State<_ShelfHorizontalBookList> createState() => _ShelfHorizontalBookListState();
+}
+
+class _ShelfHorizontalBookListState extends State<_ShelfHorizontalBookList> {
+  final ScrollController _scrollController = ScrollController();
+  int _offscreenRightCount = 0;
+  int _offscreenLeftCount = 0;
+  int? _firstRightMatchIndex;
+  int? _lastLeftMatchIndex;
+  bool _hasAutoScrolled = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _scrollController.addListener(_updateOffscreenCounts);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        _checkInitialScrollAndCounts();
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _ShelfHorizontalBookList oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.searchQuery != oldWidget.searchQuery ||
+        widget.highlightBookId != oldWidget.highlightBookId ||
+        widget.books.length != oldWidget.books.length) {
+      _hasAutoScrolled = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          _checkInitialScrollAndCounts();
+        }
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _scrollController.removeListener(_updateOffscreenCounts);
+    _scrollController.dispose();
+    super.dispose();
+  }
+
+  bool _isMatch(BookModel book) {
+    if (widget.searchQuery.isNotEmpty) {
+      return book.title.toLowerCase().contains(widget.searchQuery) ||
+          book.author.toLowerCase().contains(widget.searchQuery);
+    }
+    return widget.highlightBookId != null && book.id == widget.highlightBookId;
+  }
+
+  double _getBookWidth(BookModel book) {
+    final variation = (book.title.length * 3) % 8;
+    return 41.0 + variation;
+  }
+
+  List<double> _computeBookStartOffsets() {
+    final offsets = <double>[];
+    double current = 4.0;
+    for (final book in widget.books) {
+      offsets.add(current);
+      final width = _getBookWidth(book);
+      current += width + 8.0;
+    }
+    return offsets;
+  }
+
+  void _updateOffscreenCounts() {
+    if (!_scrollController.hasClients || !mounted) return;
+
+    final scrollOffset = _scrollController.offset;
+    final viewportWidth = _scrollController.position.viewportDimension;
+    if (viewportWidth <= 0) return;
+
+    final startOffsets = _computeBookStartOffsets();
+    int offscreenRight = 0;
+    int offscreenLeft = 0;
+    int? firstRightMatch;
+    int? lastLeftMatch;
+
+    for (int i = 0; i < widget.books.length; i++) {
+      final book = widget.books[i];
+      if (!_isMatch(book)) continue;
+
+      final startX = startOffsets[i];
+      final endX = startX + _getBookWidth(book);
+
+      if (startX > scrollOffset + viewportWidth - 20) {
+        offscreenRight++;
+        firstRightMatch ??= i;
+      } else if (endX < scrollOffset + 20) {
+        offscreenLeft++;
+        lastLeftMatch = i;
+      }
+    }
+
+    if (offscreenRight != _offscreenRightCount ||
+        offscreenLeft != _offscreenLeftCount ||
+        firstRightMatch != _firstRightMatchIndex ||
+        lastLeftMatch != _lastLeftMatchIndex) {
+      setState(() {
+        _offscreenRightCount = offscreenRight;
+        _offscreenLeftCount = offscreenLeft;
+        _firstRightMatchIndex = firstRightMatch;
+        _lastLeftMatchIndex = lastLeftMatch;
+      });
+    }
+  }
+
+  void _checkInitialScrollAndCounts() {
+    if (!_scrollController.hasClients || !mounted) return;
+
+    final hasSpecificHighlight = widget.highlightBookId != null;
+    final hasSearch = widget.searchQuery.isNotEmpty;
+
+    if ((hasSpecificHighlight || hasSearch) && !_hasAutoScrolled) {
+      _hasAutoScrolled = true;
+      final startOffsets = _computeBookStartOffsets();
+      final viewportWidth = _scrollController.position.viewportDimension;
+
+      int targetIndex = -1;
+      if (hasSpecificHighlight) {
+        targetIndex = widget.books.indexWhere((b) => b.id == widget.highlightBookId);
+      } else if (hasSearch) {
+        final anyVisible = widget.books.asMap().entries.any((entry) {
+          final i = entry.key;
+          final book = entry.value;
+          if (!_isMatch(book)) return false;
+          final startX = startOffsets[i];
+          final endX = startX + _getBookWidth(book);
+          return startX < viewportWidth - 25 && endX > 25;
+        });
+
+        if (!anyVisible) {
+          targetIndex = widget.books.indexWhere((b) => _isMatch(b));
+        }
+      }
+
+      if (targetIndex >= 0 && targetIndex < widget.books.length) {
+        final bookStartX = startOffsets[targetIndex];
+        final bookWidth = _getBookWidth(widget.books[targetIndex]);
+        final targetOffset = (bookStartX + bookWidth / 2) - (viewportWidth / 2);
+        final clampedOffset = targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent);
+
+        _scrollController.animateTo(
+          clampedOffset,
+          duration: const Duration(milliseconds: 400),
+          curve: Curves.easeOutCubic,
+        );
+      }
+    }
+
+    _updateOffscreenCounts();
+  }
+
+  void _scrollToNextMatch() {
+    if (_firstRightMatchIndex != null && _scrollController.hasClients) {
+      final startOffsets = _computeBookStartOffsets();
+      final viewportWidth = _scrollController.position.viewportDimension;
+      final idx = _firstRightMatchIndex!;
+      final bookStartX = startOffsets[idx];
+      final bookWidth = _getBookWidth(widget.books[idx]);
+      final targetOffset = (bookStartX + bookWidth / 2) - (viewportWidth / 2);
+      final clamped = targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent);
+
+      _scrollController.animateTo(
+        clamped,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOutCubic,
+      );
+    }
+  }
+
+  void _scrollToPreviousMatch() {
+    if (_lastLeftMatchIndex != null && _scrollController.hasClients) {
+      final startOffsets = _computeBookStartOffsets();
+      final viewportWidth = _scrollController.position.viewportDimension;
+      final idx = _lastLeftMatchIndex!;
+      final bookStartX = startOffsets[idx];
+      final bookWidth = _getBookWidth(widget.books[idx]);
+      final targetOffset = (bookStartX + bookWidth / 2) - (viewportWidth / 2);
+      final clamped = targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent);
+
+      _scrollController.animateTo(
+        clamped,
+        duration: const Duration(milliseconds: 350),
+        curve: Curves.easeInOutCubic,
+      );
+    }
+  }
+
+  Widget _buildJumpPill({
+    required IconData icon,
+    required int count,
+    required bool isRight,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      key: Key(isRight ? 'jump_pill_right_${widget.shelfNumber}' : 'jump_pill_left_${widget.shelfNumber}'),
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+          decoration: BoxDecoration(
+            color: AppColors.primaryDark,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withAlpha(70),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+            border: Border.all(
+              color: Colors.white.withAlpha(200),
+              width: 1,
+            ),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (!isRight) ...[
+                Icon(icon, size: 14, color: Colors.white),
+                const SizedBox(width: 4),
+              ],
+              Text(
+                '$count ${count == 1 ? 'coincident' : 'coincidents'}',
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 11,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (isRight) ...[
+                const SizedBox(width: 4),
+                Icon(icon, size: 14, color: Colors.white),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      children: [
+        ReorderableListView.builder(
+          scrollController: _scrollController,
+          scrollDirection: Axis.horizontal,
+          buildDefaultDragHandles: false,
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          itemCount: widget.books.length,
+          onReorder: (oldIdx, newIdx) {
+            widget.onReorder(widget.shelfNumber, oldIdx, newIdx, widget.books);
+          },
+          proxyDecorator: (child, index, animation) {
+            return AnimatedBuilder(
+              animation: animation,
+              builder: (context, child) {
+                final animValue = Curves.easeInOut.transform(animation.value);
+                final elevation = lerpDouble(0, 8, animValue) ?? 0;
+                final scale = lerpDouble(1.0, 1.05, animValue) ?? 1.0;
+                return Transform.scale(
+                  scale: scale,
+                  child: Material(
+                    elevation: elevation,
+                    color: Colors.transparent,
+                    shadowColor: Colors.black.withAlpha(90),
+                    child: child,
+                  ),
+                );
+              },
+              child: child,
+            );
+          },
+          itemBuilder: (context, bIdx) {
+            final book = widget.books[bIdx];
+            final matchesQuery = widget.searchQuery.isNotEmpty && (
+              book.title.toLowerCase().contains(widget.searchQuery) ||
+              book.author.toLowerCase().contains(widget.searchQuery)
+            );
+            final isHighlighted = matchesQuery ||
+                (widget.highlightBookId != null && book.id == widget.highlightBookId);
+            final isDimmed = (widget.searchQuery.isNotEmpty || widget.highlightBookId != null) &&
+                !isHighlighted;
+
+            return ReorderableDelayedDragStartListener(
+              key: ValueKey(book.id),
+              index: bIdx,
+              enabled: widget.canEdit && widget.searchQuery.isEmpty && !widget.onlyBorrowedFilter,
+              child: Align(
+                alignment: Alignment.bottomCenter,
+                child: Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: BookSpineWidget(
+                    book: book,
+                    displayIndex: bIdx + 1,
+                    isHighlighted: isHighlighted,
+                    isDimmed: isDimmed,
+                    onTap: () {
+                      widget.onBookTap(book, widget.currentBookcase, widget.canEdit);
+                    },
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+        if (_offscreenLeftCount > 0)
+          Positioned(
+            left: 8,
+            top: 8,
+            child: _buildJumpPill(
+              icon: Icons.arrow_back_rounded,
+              count: _offscreenLeftCount,
+              isRight: false,
+              onTap: _scrollToPreviousMatch,
+            ),
+          ),
+        if (_offscreenRightCount > 0)
+          Positioned(
+            right: 8,
+            top: 8,
+            child: _buildJumpPill(
+              icon: Icons.arrow_forward_rounded,
+              count: _offscreenRightCount,
+              isRight: true,
+              onTap: _scrollToNextMatch,
+            ),
+          ),
+      ],
     );
   }
 }

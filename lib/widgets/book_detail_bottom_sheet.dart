@@ -1,5 +1,7 @@
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../core/feedback/app_feedback.dart';
@@ -75,6 +77,8 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
   late final BookEnrichmentService _enrichmentService;
 
   bool _isLoadingEnrichment = false;
+  bool _isLoadingAiSynopsis = false;
+  bool _isUploadingCover = false;
   bool _isSynopsisExpanded = false;
   Future<BookModel>? _enrichmentFuture;
 
@@ -226,6 +230,207 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
           _isLoadingEnrichment = false;
         });
         AppFeedback.showError(context, 'Error en recarregar les dades: $e');
+      }
+    }
+  }
+
+  Future<void> _generateAiSynopsisManually() async {
+    if (_isLoadingAiSynopsis) return;
+
+    setState(() {
+      _isLoadingAiSynopsis = true;
+    });
+
+    try {
+      final synopsis = await _enrichmentService.generateAiSynopsis(
+        title: _currentBook.title,
+        author: _currentBook.author,
+        year: int.tryParse(_currentBook.publishedYear ?? ''),
+      );
+
+      if (synopsis != null && synopsis.isNotEmpty && mounted) {
+        final updated = _currentBook.copyWith(
+          synopsis: synopsis,
+          isAiSynopsis: true,
+        );
+
+        setState(() {
+          _currentBook = updated;
+          _isLoadingAiSynopsis = false;
+        });
+        widget.onBookChanged?.call();
+
+        // Persistència a Cloud Firestore
+        if (widget.libraryId.isNotEmpty && _currentBook.id.isNotEmpty) {
+          try {
+            await FirebaseFirestore.instance
+                .collection('libraries')
+                .doc(widget.libraryId)
+                .collection('books')
+                .doc(_currentBook.id)
+                .update({
+                  'synopsis': synopsis,
+                  'isAiSynopsis': true,
+                })
+                .timeout(const Duration(seconds: 2));
+          } catch (e) {
+            debugPrint('Error persistint sinopsi IA a Firestore: $e');
+          }
+        }
+
+        if (mounted) {
+          AppFeedback.showSuccess(context, 'Resum generat correctament amb IA!');
+        }
+      } else if (mounted) {
+        setState(() {
+          _isLoadingAiSynopsis = false;
+        });
+        AppFeedback.showWarning(context, 'No s\'ha pogut generar el resum amb IA. Revisa la clau de Gemini.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isLoadingAiSynopsis = false;
+        });
+        AppFeedback.showError(context, 'Error generant sinopsi: $e');
+      }
+    }
+  }
+
+  Future<void> _promptCoverSource() async {
+    if (!widget.canEdit) return;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) => Container(
+        padding: const EdgeInsets.fromLTRB(20, 16, 20, 24),
+        decoration: const BoxDecoration(
+          color: AppColors.surface,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+        ),
+        child: SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 44,
+                height: 5,
+                margin: const EdgeInsets.only(bottom: 16),
+                decoration: BoxDecoration(
+                  color: AppColors.accent.withAlpha(120),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+              ),
+              const Text(
+                'Canviar portada del llibre',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                  color: AppColors.textMain,
+                ),
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                key: const Key('cover_source_camera'),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withAlpha(25),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.camera_alt_outlined, color: AppColors.primary),
+                ),
+                title: const Text('Fer foto de la portada', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Utilitza la càmera del dispositiu'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _pickAndUploadCover(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                key: const Key('cover_source_gallery'),
+                leading: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withAlpha(25),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Icon(Icons.photo_library_outlined, color: AppColors.primary),
+                ),
+                title: const Text('Triar de la galeria', style: TextStyle(fontWeight: FontWeight.w600)),
+                subtitle: const Text('Selecciona una imatge desada'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _pickAndUploadCover(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _pickAndUploadCover(ImageSource source) async {
+    try {
+      final picker = ImagePicker();
+      final pickedFile = await picker.pickImage(
+        source: source,
+        maxWidth: 600,
+        imageQuality: 80,
+      );
+      if (pickedFile == null) return;
+
+      setState(() {
+        _isUploadingCover = true;
+      });
+
+      final bytes = await pickedFile.readAsBytes();
+      final downloadUrl = await _enrichmentService.uploadBookCover(
+        libraryId: widget.libraryId,
+        bookId: _currentBook.id,
+        imageBytes: bytes,
+      );
+
+      if (downloadUrl != null && mounted) {
+        final updated = _currentBook.copyWith(coverUrl: downloadUrl);
+        setState(() {
+          _currentBook = updated;
+          _isUploadingCover = false;
+        });
+        widget.onBookChanged?.call();
+
+        // Persistència a Firestore
+        if (widget.libraryId.isNotEmpty && _currentBook.id.isNotEmpty) {
+          try {
+            await FirebaseFirestore.instance
+                .collection('libraries')
+                .doc(widget.libraryId)
+                .collection('books')
+                .doc(_currentBook.id)
+                .update({'coverUrl': downloadUrl})
+                .timeout(const Duration(seconds: 2));
+          } catch (e) {
+            debugPrint('Error persistint coverUrl a Firestore: $e');
+          }
+        }
+
+        if (mounted) {
+          AppFeedback.showSuccess(context, 'Portada actualitzada correctament!');
+        }
+      } else if (mounted) {
+        setState(() {
+          _isUploadingCover = false;
+        });
+        AppFeedback.showError(context, 'No s\'ha pogut pujar la portada.');
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isUploadingCover = false;
+        });
+        AppFeedback.showError(context, 'Error en seleccionar la portada: $e');
       }
     }
   }
@@ -515,15 +720,24 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
                       // Botó Editar
                       OutlinedButton.icon(
                         key: const Key('edit_book_button'),
-                        onPressed: () {
-                          Navigator.of(context).pop();
-                          showEditBookBottomSheet(
+                        onPressed: () async {
+                          final saved = await showEditBookBottomSheet(
                             context,
                             libraryId: widget.libraryId,
                             bookcase: widget.bookcase,
                             book: _currentBook,
                             bookcaseService: _bookcaseService,
+                            enrichmentService: _enrichmentService,
                           );
+                          if (saved != null && mounted) {
+                            setState(() {
+                              _currentBook = saved;
+                            });
+                            widget.onBookChanged?.call();
+                            if (saved.synopsis == null || saved.coverUrl == null) {
+                              _refreshEnrichmentData();
+                            }
+                          }
                         },
                         icon: const Icon(Icons.edit_rounded, size: 18, color: AppColors.primary),
                         label: const Text(
@@ -567,8 +781,9 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
     final rawCover = _currentBook.coverUrl;
     final cover = BookEnrichmentService.getSafeDisplayCoverUrl(rawCover);
 
+    Widget imageWidget;
     if (cover != null && cover.isNotEmpty) {
-      return Container(
+      imageWidget = Container(
         width: 76,
         height: 110,
         decoration: BoxDecoration(
@@ -604,9 +819,64 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
           },
         ),
       );
+    } else {
+      imageWidget = _buildFallbackSpine();
     }
 
-    return _buildFallbackSpine();
+    if (!widget.canEdit) {
+      return imageWidget;
+    }
+
+    return Tooltip(
+      message: 'Toca per canviar la portada',
+      child: InkWell(
+        key: const Key('change_cover_button'),
+        onTap: _isUploadingCover ? null : _promptCoverSource,
+        borderRadius: BorderRadius.circular(10),
+        child: Stack(
+          children: [
+            imageWidget,
+            if (_isUploadingCover)
+              Positioned.fill(
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: Colors.black.withAlpha(120),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: const Center(
+                    child: SizedBox(
+                      width: 24,
+                      height: 24,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2.5,
+                        color: Colors.white,
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Positioned(
+                right: 4,
+                bottom: 4,
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withAlpha(150),
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 1.2),
+                  ),
+                  child: const Icon(
+                    Icons.camera_alt_rounded,
+                    size: 13,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ),
+    );
   }
 
   Widget _buildFallbackSpine() {
@@ -765,8 +1035,35 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
                   color: AppColors.textMuted,
                 ),
               ),
+              if (_currentBook.isAiSynopsis) ...[
+                const SizedBox(width: 8),
+                Container(
+                  key: const Key('ai_synopsis_badge'),
+                  padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: AppColors.primary.withAlpha(20),
+                    borderRadius: BorderRadius.circular(6),
+                    border: Border.all(color: AppColors.primary.withAlpha(60)),
+                  ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.auto_awesome_rounded, size: 11, color: AppColors.primary),
+                      SizedBox(width: 4),
+                      Text(
+                        '✨ Resum generat per IA',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.primaryDark,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
               const Spacer(),
-              if (_isLoadingEnrichment)
+              if (_isLoadingEnrichment || _isLoadingAiSynopsis)
                 const SizedBox(
                   width: 14,
                   height: 14,
@@ -823,6 +1120,29 @@ class _BookDetailBottomSheetState extends State<BookDetailBottomSheet> {
                 color: AppColors.textMuted,
               ),
             ),
+            if (widget.canEdit) ...[
+              const SizedBox(height: 12),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton.tonalIcon(
+                  key: const Key('generate_ai_synopsis_button'),
+                  onPressed: (_isLoadingAiSynopsis || _isLoadingEnrichment)
+                      ? null
+                      : _generateAiSynopsisManually,
+                  icon: _isLoadingAiSynopsis
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.primary),
+                        )
+                      : const Icon(Icons.auto_awesome_rounded, size: 18),
+                  label: Text(
+                    _isLoadingAiSynopsis ? 'Generant resum amb Gemini...' : 'Generar sinopsi amb IA',
+                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                  ),
+                ),
+              ),
+            ],
           ],
         ],
       ),

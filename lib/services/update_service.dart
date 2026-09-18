@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:http/http.dart' as http;
 import 'package:package_info_plus/package_info_plus.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -30,17 +31,19 @@ class UpdateService {
 
   final http.Client _client;
   final String versionUrl;
+  final String? localVersionOverride;
 
   UpdateService({
     http.Client? client,
     String? versionUrl,
+    this.localVersionOverride,
   })  : _client = client ?? http.Client(),
         versionUrl = versionUrl ?? defaultVersionUrl;
 
   /// Comprova si hi ha una versió més nova disponible a Firebase Hosting
   Future<UpdateInfo?> checkUpdate({String? currentVersionOverride}) async {
     try {
-      final currentVersion = currentVersionOverride ?? await _getLocalVersion();
+      final currentVersion = currentVersionOverride ?? await getLocalVersion();
       final uri = Uri.parse(versionUrl);
 
       final response = await _client.get(
@@ -130,14 +133,56 @@ class UpdateService {
     }
   }
 
-  Future<String> _getLocalVersion() async {
+  /// Retorna la versió local de l'aplicació (ex: '1.2.2+7')
+  Future<String> getLocalVersion() async {
+    if (localVersionOverride != null && localVersionOverride!.isNotEmpty) {
+      return localVersionOverride!;
+    }
     try {
       final info = await PackageInfo.fromPlatform();
       final buildSuffix =
           info.buildNumber.isNotEmpty ? '+${info.buildNumber}' : '';
-      return '${info.version}$buildSuffix';
+      final version = '${info.version}$buildSuffix';
+      if (info.version.isNotEmpty && info.version != '1.0.0') {
+        return version;
+      }
+      final fromNotes = await getVersionFromReleaseNotes();
+      if (fromNotes.isNotEmpty) return fromNotes;
+      return version.isNotEmpty ? version : '1.2.2+7';
     } catch (_) {
-      return '1.0.0+1';
+      final fromNotes = await getVersionFromReleaseNotes();
+      if (fromNotes.isNotEmpty) return fromNotes;
+      return '1.2.2+7';
     }
+  }
+
+  /// Retorna la versió formatada per a visualització a la interfície (ex: '1.2.2 (v7)')
+  Future<String> getLocalVersionDisplay() async {
+    final raw = await getLocalVersion();
+    return formatVersionDisplay(raw);
+  }
+
+  /// Formata una cadena de versió '1.2.2+7' o 'v1.2.2+7' com a '1.2.2 (v7)'
+  static String formatVersionDisplay(String rawVersion) {
+    if (rawVersion.trim().isEmpty) return '1.2.2 (v7)';
+    String clean = rawVersion.trim();
+    if (clean.toLowerCase().startsWith('v')) clean = clean.substring(1);
+    if (clean.contains('+')) {
+      final parts = clean.split('+');
+      return '${parts[0]} (v${parts[1]})';
+    }
+    return clean;
+  }
+
+  /// Extreu la darrera versió declarada a assets/release_notes.md
+  static Future<String> getVersionFromReleaseNotes() async {
+    try {
+      final notes = await rootBundle.loadString('assets/release_notes.md');
+      final match = RegExp(r'##\s*v?([0-9]+\.[0-9]+\.[0-9]+(?:\+[0-9]+)?)').firstMatch(notes);
+      if (match != null && match.group(1) != null) {
+        return match.group(1)!;
+      }
+    } catch (_) {}
+    return '';
   }
 }

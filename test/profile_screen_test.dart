@@ -102,7 +102,8 @@ void main() {
       expect(find.text('Accessibilitat i Preferències'), findsOneWidget);
       expect(find.text('Mode text extra gran'), findsOneWidget);
       expect(find.text("Versió de l'aplicació"), findsOneWidget);
-      expect(find.text('1.0.0 (v1)'), findsOneWidget);
+      expect(find.byKey(const Key('profile_app_version_text')), findsOneWidget);
+      expect(find.textContaining('(v'), findsOneWidget);
 
       // Accions de compte
       expect(find.text('Gestió de Compte'), findsOneWidget);

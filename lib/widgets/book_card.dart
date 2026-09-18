@@ -46,42 +46,57 @@ class BookCard extends StatelessWidget {
           onTap: onTap,
           borderRadius: BorderRadius.circular(18),
           child: Container(
-            constraints: const BoxConstraints(minHeight: 110),
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 16),
+            constraints: const BoxConstraints(minHeight: 100),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
             child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Indicador visual de llibre / llom accessible
+                // Indicador visual de llibre / llom accessible o portada
                 Container(
-                  width: 52,
-                  height: 72,
+                  width: 48,
+                  height: 68,
                   decoration: BoxDecoration(
                     color: AppColors.accent.withAlpha(45),
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.circular(10),
                     border: Border.all(
                       color: AppColors.accent.withAlpha(100),
                       width: 1.2,
                     ),
                   ),
-                  child: const Center(
-                    child: Icon(
-                      Icons.menu_book_rounded,
-                      color: AppColors.primaryDark,
-                      size: 30,
-                    ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(9),
+                    child: (book.coverUrl != null && book.coverUrl!.isNotEmpty)
+                        ? Image.network(
+                            book.coverUrl!,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, _, _) => const Center(
+                              child: Icon(
+                                Icons.menu_book_rounded,
+                                color: AppColors.primaryDark,
+                                size: 26,
+                              ),
+                            ),
+                          )
+                        : const Center(
+                            child: Icon(
+                              Icons.menu_book_rounded,
+                              color: AppColors.primaryDark,
+                              size: 26,
+                            ),
+                          ),
                   ),
                 ),
-                const SizedBox(width: 16),
+                const SizedBox(width: 12),
 
-                // Informació del llibre amb alta llegibilitat
+                // Informació del llibre amb amplada completa per al títol i autor
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
-                    mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       Text(
                         book.title,
                         style: const TextStyle(
-                          fontSize: 18,
+                          fontSize: 17,
                           fontWeight: FontWeight.bold,
                           color: AppColors.textMain,
                           height: 1.25,
@@ -89,76 +104,84 @@ class BookCard extends StatelessWidget {
                         maxLines: 2,
                         overflow: TextOverflow.ellipsis,
                       ),
-                      const SizedBox(height: 5),
-                      Text(
-                        book.author,
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: AppColors.textMuted,
+                      if (book.author.isNotEmpty) ...[
+                        const SizedBox(height: 4),
+                        Text(
+                          book.author,
+                          style: const TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                            color: AppColors.textMuted,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
+                      ],
                       const SizedBox(height: 8),
 
-                      // Indicador de posició físic
+                      // Fila inferior: Indicador de posició i botó «Anar a Balda X →»
                       Row(
                         children: [
-                          Icon(
-                            Icons.swap_horiz_rounded,
-                            size: 18,
-                            color: AppColors.textMuted.withAlpha(200),
-                          ),
-                          const SizedBox(width: 5),
                           Flexible(
-                            child: Text(
-                              'Posició #${book.positionIndex} d\'esquerra a dreta',
-                              style: TextStyle(
-                                fontSize: 14,
-                                fontWeight: FontWeight.w500,
-                                color: AppColors.textMuted.withAlpha(220),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  Icons.swap_horiz_rounded,
+                                  size: 16,
+                                  color: AppColors.textMuted.withAlpha(200),
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    'Posició #${book.positionIndex}',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      fontWeight: FontWeight.w500,
+                                      color: AppColors.textMuted.withAlpha(220),
+                                    ),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+
+                          // Botó d'acció explícit «Anar a Balda X →»
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: AppColors.accent.withAlpha(65),
+                              borderRadius: BorderRadius.circular(10),
+                              border: Border.all(
+                                color: AppColors.accent.withAlpha(140),
+                                width: 1.1,
                               ),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  'Anar a $formattedShelf',
+                                  style: const TextStyle(
+                                    fontSize: 12.5,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.primaryDark,
+                                    letterSpacing: 0.1,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                const Icon(
+                                  Icons.arrow_forward_rounded,
+                                  size: 14,
+                                  color: AppColors.primaryDark,
+                                ),
+                              ],
                             ),
                           ),
                         ],
-                      ),
-                    ],
-                  ),
-                ),
-
-                const SizedBox(width: 12),
-
-                // Botó d'acció explícit a la dreta «Anar a Balda X →»
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                  decoration: BoxDecoration(
-                    color: AppColors.accent.withAlpha(65),
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(
-                      color: AppColors.accent.withAlpha(140),
-                      width: 1.2,
-                    ),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text(
-                        'Anar a $formattedShelf',
-                        style: const TextStyle(
-                          fontSize: 13.5,
-                          fontWeight: FontWeight.w800,
-                          color: AppColors.primaryDark,
-                          letterSpacing: 0.2,
-                        ),
-                      ),
-                      const SizedBox(width: 4),
-                      const Icon(
-                        Icons.arrow_forward_rounded,
-                        size: 16,
-                        color: AppColors.primaryDark,
                       ),
                     ],
                   ),

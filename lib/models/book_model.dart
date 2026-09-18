@@ -18,6 +18,7 @@ class BookModel {
   final String? publishedYear;
   final String? infoUrl;
   final int enrichmentAttempts;
+  final bool isAiSynopsis;
   final bool isBorrowed;
   final String? borrowedTo;
   final DateTime? borrowedAt;
@@ -40,6 +41,7 @@ class BookModel {
     this.publishedYear,
     this.infoUrl,
     this.enrichmentAttempts = 0,
+    this.isAiSynopsis = false,
     this.isBorrowed = false,
     this.borrowedTo,
     this.borrowedAt,
@@ -58,12 +60,13 @@ class BookModel {
       'photoUrl': photoUrl,
       'notes': notes,
       if (box != null) 'box': box,
-      if (synopsis != null) 'synopsis': synopsis,
-      if (coverUrl != null) 'coverUrl': coverUrl,
-      if (pageCount != null) 'pageCount': pageCount,
-      if (publishedYear != null) 'publishedYear': publishedYear,
-      if (infoUrl != null) 'infoUrl': infoUrl,
-      if (enrichmentAttempts > 0) 'enrichmentAttempts': enrichmentAttempts,
+      'synopsis': synopsis,
+      'coverUrl': coverUrl,
+      'pageCount': pageCount,
+      'publishedYear': publishedYear,
+      'infoUrl': infoUrl,
+      'enrichmentAttempts': enrichmentAttempts,
+      'isAiSynopsis': isAiSynopsis,
       'isBorrowed': isBorrowed,
       if (borrowedTo != null) 'borrowedTo': borrowedTo,
       if (borrowedAt != null) 'borrowedAt': Timestamp.fromDate(borrowedAt!),
@@ -91,6 +94,7 @@ class BookModel {
       publishedYear: map['publishedYear'] as String?,
       infoUrl: map['infoUrl'] as String?,
       enrichmentAttempts: (map['enrichmentAttempts'] as num?)?.toInt() ?? 0,
+      isAiSynopsis: map['isAiSynopsis'] as bool? ?? false,
       isBorrowed: map['isBorrowed'] as bool? ?? false,
       borrowedTo: map['borrowedTo'] as String?,
       borrowedAt: map['borrowedAt'] != null ? _parseDateTime(map['borrowedAt']) : null,
@@ -114,14 +118,22 @@ class BookModel {
     String? notes,
     List<int>? box,
     String? synopsis,
+    bool clearSynopsis = false,
     String? coverUrl,
+    bool clearCoverUrl = false,
     int? pageCount,
+    bool clearPageCount = false,
     String? publishedYear,
+    bool clearPublishedYear = false,
     String? infoUrl,
+    bool clearInfoUrl = false,
     int? enrichmentAttempts,
+    bool? isAiSynopsis,
     bool? isBorrowed,
     String? borrowedTo,
+    bool clearBorrowedTo = false,
     DateTime? borrowedAt,
+    bool clearBorrowedAt = false,
     List<LoanRecord>? loanHistory,
     DateTime? createdAt,
   }) {
@@ -135,17 +147,31 @@ class BookModel {
       photoUrl: photoUrl ?? this.photoUrl,
       notes: notes ?? this.notes,
       box: box ?? this.box,
-      synopsis: synopsis ?? this.synopsis,
-      coverUrl: coverUrl ?? this.coverUrl,
-      pageCount: pageCount ?? this.pageCount,
-      publishedYear: publishedYear ?? this.publishedYear,
-      infoUrl: infoUrl ?? this.infoUrl,
+      synopsis: clearSynopsis ? null : (synopsis ?? this.synopsis),
+      coverUrl: clearCoverUrl ? null : (coverUrl ?? this.coverUrl),
+      pageCount: clearPageCount ? null : (pageCount ?? this.pageCount),
+      publishedYear: clearPublishedYear ? null : (publishedYear ?? this.publishedYear),
+      infoUrl: clearInfoUrl ? null : (infoUrl ?? this.infoUrl),
       enrichmentAttempts: enrichmentAttempts ?? this.enrichmentAttempts,
+      isAiSynopsis: isAiSynopsis ?? this.isAiSynopsis,
       isBorrowed: isBorrowed ?? this.isBorrowed,
-      borrowedTo: borrowedTo ?? this.borrowedTo,
-      borrowedAt: borrowedAt ?? this.borrowedAt,
+      borrowedTo: clearBorrowedTo ? null : (borrowedTo ?? this.borrowedTo),
+      borrowedAt: clearBorrowedAt ? null : (borrowedAt ?? this.borrowedAt),
       loanHistory: loanHistory ?? this.loanHistory,
       createdAt: createdAt ?? this.createdAt,
+    );
+  }
+
+  /// Retorna un nou llibre netejant les metadades d'enriquiment existents (per quan es canvia el títol o autor)
+  BookModel resetEnrichment() {
+    return copyWith(
+      clearSynopsis: true,
+      clearCoverUrl: true,
+      clearPageCount: true,
+      clearPublishedYear: true,
+      clearInfoUrl: true,
+      enrichmentAttempts: 0,
+      isAiSynopsis: false,
     );
   }
 

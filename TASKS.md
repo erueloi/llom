@@ -1042,6 +1042,114 @@
 - [x] Verificacions i qualitat:
   * **197 de 197 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
 
+### ✅ Tasca 52: Resolució del bug d'actualització de portada i sinopsi en editar un llibre
+- [x] Diagnòstic exhaustiu de les causes arrel:
+  * Retenció de metadades obsoletes a [lib/widgets/add_manual_book_dialog.dart](file:///c:/git/llom/lib/widgets/add_manual_book_dialog.dart): en canviar el títol o autor des del formulari d'edició, `widget.existingBook!.copyWith(...)` preservava la sinopsi, portada, nombre de pàgines, any i els intents d'enriquiment (`attempts: 3`) del llibre anterior erroni ("Sense títol").
+  * Limitació de model a [lib/models/book_model.dart](file:///c:/git/llom/lib/models/book_model.dart): `copyWith` feia servir `field ?? this.field`, impedint buidar camps a `null`. A més, `toMap()` ometia claus quan el valor era `null`, de manera que `batch.update()` a Firestore no esborrava els camps obsolets del document.
+  * Bloqueig de persistència a [lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart): en prémer el botó de recàrrega (`force: true`), la condició `if (!hasSynopsis && newSynopsis != null)` impedia desar a Firestore les noves dades si el llibre ja en contenia de prèvies.
+  * Cerca limitada a un sol document a Open Library: la consulta utilitzava `limit: 1`, perdent portades o metadades vàlides presents en edicions paral·leles del mateix llibre.
+- [x] Correccions aplicades:
+  * A [lib/models/book_model.dart](file:///c:/git/llom/lib/models/book_model.dart):
+    - Afegits paràmetres de neteja explícita a `copyWith` (`clearSynopsis`, `clearCoverUrl`, `clearPageCount`, `clearPublishedYear`, `clearInfoUrl`).
+    - Afegit mètode dedicat `BookModel resetEnrichment()` per reiniciar les metadades i el comptador d'intents.
+    - Serialització explícita a `toMap()` de les claus d'enriquiment (permetent desar valors `null` a Firestore en cas de neteja).
+  * A [lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart):
+    - A `enrichAndPersistBook`, quan `force: true`, les noves dades sobreescriuen les antigues en memòria i s'actualitzen sense bloqueig a Firestore mitjançant `(force || !hasSynopsis)`.
+    - A `fetchFromOpenLibrary`, ampliada la cerca a `limit: 5` iterant entre els resultats per extreure el primer `cover_i` i la millor informació editorial.
+  * A [lib/widgets/add_manual_book_dialog.dart](file:///c:/git/llom/lib/widgets/add_manual_book_dialog.dart):
+    - En desar l'edició, si el títol o l'autor han canviat, es netegen automàticament les metadades anteriors mitjançant `resetEnrichment()`, es desa el document net i es dispara immediatament la recerca en segon pla per al nou títol.
+  * A [lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart):
+    - En desar l'edició d'un llibre, s'actualitza l'estat local de la modal de detalls i, si falten portada o sinopsi, es dispara de seguida `_refreshEnrichmentData()`.
+- [x] Suite de tests i verificacions:
+  * Afegit test a [test/models_test.dart](file:///c:/git/llom/test/models_test.dart) per verificar `resetEnrichment()` i la serialització nula a `toMap()`.
+  * Afegit test a [test/book_enrichment_service_test.dart](file:///c:/git/llom/test/book_enrichment_service_test.dart) per verificar que `force: true` sobreescriu les dades velles fins i tot amb `attempts >= 3`.
+  * Afegit test a [test/add_manual_book_dialog_test.dart](file:///c:/git/llom/test/add_manual_book_dialog_test.dart) per comprovar que l'edició de títol neteja metadades obsoletes i dispara l'enriquiment del nou llibre.
+  * **200 de 200 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 53: Fallback de sinopsi amb Gemini Flash i pujada/captura manual de portada
+- [x] Model de dades i regles d'emmagatzematge:
+  * A `BookModel` ([lib/models/book_model.dart](file:///c:/git/llom/lib/models/book_model.dart)), afegit camp `final bool isAiSynopsis;` (per defecte `false`), amb suport a `toMap()`, `fromMap()`, `copyWith()` i neteja a `resetEnrichment()`.
+  * A [storage.rules](file:///c:/git/llom/storage.rules), afegida regla de lectura pública i escriptura autenticada per al camí `covers/{libraryId}/{allPaths=**}`.
+- [x] Fallback de sinopsi assistida per Gemini Flash ([lib/services/book_enrichment_service.dart](file:///c:/git/llom/lib/services/book_enrichment_service.dart)):
+  * Implementat mètode `generateAiSynopsis({required String title, String? author, int? year, ...})` amb resolució dinàmica de models (`gemini-flash-latest`, `gemini-3.8-flash`, `gemini-3.7-flash`, `gemini-3.5-flash`, `gemini-2.5-flash`, `gemini-2.0-flash`, `gemini-1.5-flash`) amb la clau `GEMINI_API_KEY` (o configurada a `ShelfVisionService.getEffectiveApiKey()`), garantint sempre l'ús de la generació Gemini 3 més recent i ràpida de Google AI.
+  * Prompt de sistema especialitzat com a bibliotecari expert concís (màxim 2 paràgrafs, en català/castellà segons el títol, descrivint context temàtic sense al·lucinar dades).
+  * Integració automàtica a `enrichAndPersistBook`: quan Google Books i Open Library no retornen sinopsi, es crida automàticament `generateAiSynopsis` i es persisteix a Firestore amb `isAiSynopsis: true`.
+  * Suport per a `AiSynopsisGenerator` configurable per a injecció de dependències i proves unitàries deterministes.
+- [x] Indicador visual i generació manual de sinopsi ([lib/widgets/book_detail_bottom_sheet.dart](file:///c:/git/llom/lib/widgets/book_detail_bottom_sheet.dart)):
+  * Quan `isAiSynopsis == true`, es mostra l'etiqueta xip `✨ Resum generat per IA` (`Key('ai_synopsis_badge')`) a la capçalera de la secció de sinopsi.
+  * Quan un llibre no disposa de sinopsi (i l'usuari té permisos d'edició), es mostra el botó tonal `Generar sinopsi amb IA` (`Key('generate_ai_synopsis_button')`) amb icona `Icons.auto_awesome_rounded` i indicador de càrrega.
+  * En prémer-lo, genera el resum, actualitza l'estat local i persisteix el resultat a Cloud Firestore.
+- [x] Captura i pujada manual de portada (`BookDetailBottomSheet` i `AddEditBookBottomSheet`):
+  * Implementat mètode `uploadBookCover` a `BookEnrichmentService` que puja la imatge a `covers/{libraryId}/{bookId}.jpg` a Firebase Storage amb compressió optimitzada.
+  * A `BookDetailBottomSheet`:
+    - Portada interactiva amb indicador de càmera i progrés de càrrega (`Key('change_cover_button')`).
+    - Modal inferior amb selector natiu: «Fer foto de la portada» (`ImageSource.camera`) o «Triar de la galeria» (`ImageSource.gallery`).
+    - Compressió a ~600px d'amplada (`maxWidth: 600, imageQuality: 80`) mitjançant `image_picker`.
+    - Actualització atòmica a Cloud Firestore i refresc immediat de la interfície.
+  * A `AddEditBookBottomSheet` ([lib/widgets/add_manual_book_dialog.dart](file:///c:/git/llom/lib/widgets/add_manual_book_dialog.dart)):
+    - Previsualitzador de portada amb botó d'acció de càmera (`Key('dialog_change_cover_button')`).
+    - Suport tant en mode edició d'un llibre existent com en mode creació (pujada i vinculació automàtica en desar).
+    - Reseteig automàtic si es canvia el títol i no s'ha triat expressament una nova imatge.
+- [x] Suite de tests i verificacions:
+  * [test/models_test.dart](file:///c:/git/llom/test/models_test.dart): proves de serialització, deserialització, copyWith i reset de `isAiSynopsis`.
+  * [test/book_enrichment_service_test.dart](file:///c:/git/llom/test/book_enrichment_service_test.dart): proves de generació de sinopsi IA, llista de models candidats Gemini 3 (`gemini-3.8-flash`) i fallback automàtic quan els proveïdors no tenen descripció.
+  * [test/book_detail_bottom_sheet_test.dart](file:///c:/git/llom/test/book_detail_bottom_sheet_test.dart): proves de renderització de `ai_synopsis_badge`, presència i execució de `generate_ai_synopsis_button`, i obertura del selector de càmera/galeria.
+  * [test/add_manual_book_dialog_test.dart](file:///c:/git/llom/test/add_manual_book_dialog_test.dart): comprovació del flux d'edició i reseteig de metadades.
+  * [test/borrow_history_test.dart](file:///c:/git/llom/test/borrow_history_test.dart): inicialització defensiva de SharedPreferences.
+  * **208 de 208 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 54: Correcció de sobreposició d'estadístiques a la capçalera i optimització d'espai a les targetes de cerca
+- [x] Resolució de sobreposició a l'AppBar de `HomeScreen` ([lib/screens/home_screen.dart](file:///c:/git/llom/lib/screens/home_screen.dart)):
+  * S'ha separat el selector de biblioteca (ara autònom a `title` i envoltat amb `Flexible(child: Text(..., overflow: TextOverflow.ellipsis))` per evitar que s'expandeixi sobre `actions`).
+  * S'han unificat el botó d'estadístiques (`library_stats_button`) i el badge de comptador de llibres (`book_count_badge`) a `actions` en una única càpsula interactiva `[ 📊 X llibres ]`. Si hi ha 0 llibres, mostra únicament la icona d'estadístiques.
+  * Això elimina completament la col·lisió visual entre el badge de llibres, la icona d'estadístiques i l'avatar d'usuari en pantalles mòbils estretes en vertical.
+- [x] Optimització de la targeta de cerca `BookCard` ([lib/widgets/book_card.dart](file:///c:/git/llom/lib/widgets/book_card.dart)):
+  * S'ha reestructurat la disposició interna movent el botó «Anar a Balda X →» a la fila inferior al costat de la posició (`Posició #N`).
+  * El títol i l'autor disposen ara del 100% de l'amplada disponible de la targeta (triplicant l'espai horitzontal respecte a la disposició anterior). Els títols llargs es llegeixen perfectament sense truncar-se a poques lletres.
+  * Suport visual de miniatura de portada real (`book.coverUrl`) amb fallback a icona editorial.
+- [x] Suite de tests i verificacions:
+  * Verificades les accions de navegació a estadístiques i badge de llibres a [test/home_screen_actions_test.dart](file:///c:/git/llom/test/home_screen_actions_test.dart) i [test/profile_screen_test.dart](file:///c:/git/llom/test/profile_screen_test.dart).
+  * Verificada la detecció i navegació de targetes de cerca a [test/widget_test.dart](file:///c:/git/llom/test/widget_test.dart).
+  * **208 de 208 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 55: Indicadors i navegació de llibres coincidents no visibles a les baldes (desplaçament horitzontal)
+- [x] Diagnòstic de la usabilitat en cerca múltiple:
+  * Quan un moble d'estanteria conté baldes amb molts llibres (ex: 21 o 29 llibres), la pantalla mostra els primers exemplars (aprox. #1-#14 segons l'amplada de la pantalla) mentre que els llibres posteriors queden fora del viewport per desplaçament horitzontal.
+  * L'usuari no tenia cap forma immediata de saber si una balda tenia llibres coincidents més enllà del marge dret sense desplaçar manualment totes i cadascuna de les baldes.
+- [x] Capçalera de balda amb comptador de coincidències ([lib/screens/bookshelf_detail_screen.dart](file:///c:/git/llom/lib/screens/bookshelf_detail_screen.dart)):
+  * S'ha afegit una càpsula destacada `[ ✨ N coincidents ]` al costat del recompte de llibres (`subtitleText`) quan la balda conté coincidències amb la cerca o el llibre ressaltat.
+  * S'ha utilitzat `Wrap` (en lloc de `Row`) amb espaiat adaptable per garantir que en dispositius mòbils estrets no es produeixi cap desbordament (`RenderFlex overflow`) si coincideixen els botons d'acció de la balda.
+- [x] Desplaçament intel·ligent i píndoles flotants de salt (`_ShelfHorizontalBookList`):
+  * **Càlcul determinista de coordenades**: Càlcul exacte de la posició horitzontal `[startX, endX]` de cada exemplar a partir de les amplades de llom i l'espaiat de la llista.
+  * **Auto-scroll inicial respectuós**: Si en carregar la cerca cap dels llibres coincidents d'una balda és visible a la posició inicial (offset 0), la balda s'anima suaument per centrar el primer llibre coincident. Si ja n'hi ha algun de visible (com a les primeres posicions), manté la vista sense desplaçaments innecessaris.
+  * **Píndoles flotants de navegació d'exemplars fora de pantalla**:
+    - Si queden llibres coincidents a la dreta: apareix una píndola flotant interactiva `[ N coincidents ➔ ]` (`Key('jump_pill_right_{shelfNumber}')`) a l'extrem dret de la balda.
+    - Si l'usuari ha avançat i queden llibres coincidents a l'esquerra: apareix una píndola flotant `[ ⬅ N coincidents ]` (`Key('jump_pill_left_{shelfNumber}')`) a l'extrem esquerre.
+    - En prémer la píndola, la balda s'anima de manera fluida (`Curves.easeInOutCubic`) directe cap al llibre coincident.
+  * Preservació total del sistema de reordenació manual de llibres per arrossegament (`ReorderableListView.builder`) i dels lloms fantasma.
+- [x] Auto-scroll a `ShelfRowWidget` ([lib/widgets/shelf_row_widget.dart](file:///c:/git/llom/lib/widgets/shelf_row_widget.dart)):
+  * Mètode `_scrollToHighlightedBookIfNeeded` ampliat per desplaçar automàticament al primer llibre coincident quan es filtra per `searchQuery`.
+- [x] Suite de tests i verificacions:
+  * Afegits tests a [test/shelf_reorder_test.dart](file:///c:/git/llom/test/shelf_reorder_test.dart) avaluant la presència del badge de coincidències, la detecció de llibres fora de pantalla i la navegació interactiva en prémer la píndola de salt.
+  * **210 de 210 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
+### ✅ Tasca 56: Resolució de la versió estàtica a la pantalla de perfil (`ProfileScreen`)
+- [x] Diagnòstic de la discrepància de versió:
+  * La targeta de versió de l'aplicació a [lib/screens/profile_screen.dart](file:///c:/git/llom/lib/screens/profile_screen.dart) tenia codificada una cadena estàtica en brut `'1.0.0 (v1)'`.
+  * En obrir les notes de versió (`release_notes.md`) o en consultar `pubspec.yaml`, l'aplicació ja es trobava a la versió real `1.2.2+7` (o superiors), generant confusió visual per a l'usuari.
+- [x] Obtenció dinàmica i resilient de versió (`UpdateService`):
+  * Mètode públic `getLocalVersion()` a [lib/services/update_service.dart](file:///c:/git/llom/lib/services/update_service.dart) que consulta `PackageInfo.fromPlatform()`.
+  * Fallback intel·ligent: si `PackageInfo` retorna buit o el valor per defecte (`1.0.0`) en entorns web en desenvolupament o proves, llegeix i extreu automàticament la darrera versió declarada a la capçalera de `assets/release_notes.md` (`getVersionFromReleaseNotes()`).
+  * Mètode `getLocalVersionDisplay()` i `formatVersionDisplay()` que formata elegantment la versió en l'estil editorial de l'aplicació: `1.2.2+7` -> `1.2.2 (v7)`.
+  * Suport per a `localVersionOverride` al constructor d'`UpdateService` per a injecció de dependències i tests deterministes.
+- [x] Integració a `ProfileScreen` ([lib/screens/profile_screen.dart](file:///c:/git/llom/lib/screens/profile_screen.dart)):
+  * Estat dinàmic `_versionDisplay` carregat asíncronament a `initState()` i actualitzat a `didUpdateWidget()`.
+  * Identificador semàntic `Key('profile_app_version_text')` per a proves de widgets i accessibilitat.
+- [x] Suite de tests i verificacions:
+  * Actualitzats els tests a [test/profile_screen_test.dart](file:///c:/git/llom/test/profile_screen_test.dart) per verificar la renderització de la versió real dinàmica.
+  * Afegits tests a [test/update_service_test.dart](file:///c:/git/llom/test/update_service_test.dart) avaluant `formatVersionDisplay()`, `getLocalVersion()` amb override i l'extracció des de `assets/release_notes.md`.
+  * **213 de 213 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
 ---
 
 ## 🚀 Propers Passos

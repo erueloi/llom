@@ -1,6 +1,7 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:llom/models/book_model.dart';
 import 'package:llom/models/bookcase_model.dart';
 import 'package:llom/models/library_model.dart';
@@ -28,6 +29,8 @@ class MockLibraryProviderForBorrow extends ChangeNotifier implements LibraryProv
 }
 
 void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+  SharedPreferences.setMockInitialValues({});
   group('LoanRecord model tests', () {
     test('durationInDays calculates correct difference for completed loans', () {
       final record = LoanRecord(

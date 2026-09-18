@@ -317,6 +317,60 @@ void main() {
       expect(calls, 0); // Ho deixa estar, no fa peticions HTTP
     });
 
+    test('enrichAndPersistBook with force: true overwrites existing synopsis and coverUrl even if attempts >= 3', () async {
+      final mockClient = MockClient((request) async {
+        if (request.url.host == 'www.googleapis.com') {
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {
+                  'volumeInfo': {
+                    'title': 'Manifesto Comunista',
+                    'description': 'Nova sinopsi de Karl Marx.',
+                    'imageLinks': {
+                      'thumbnail': 'http://books.google.com/new_cover.jpg',
+                    },
+                    'pageCount': 120,
+                    'publishedDate': '1848',
+                  }
+                }
+              ]
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = BookEnrichmentService(httpClient: mockClient);
+
+      final bookWithOldData = BookModel(
+        id: 'book_force_test',
+        title: 'Manifesto Comunista',
+        author: 'Karl Marx',
+        shelfCode: 'E1-B1',
+        positionIndex: 1,
+        synopsis: 'Sinopsi vella incorrecta de Sense títol.',
+        coverUrl: 'https://example.com/old_cover.jpg',
+        pageCount: 238,
+        publishedYear: '2007',
+        enrichmentAttempts: 3,
+        createdAt: DateTime.now(),
+      );
+
+      final result = await service.enrichAndPersistBook(
+        book: bookWithOldData,
+        libraryId: '',
+        force: true,
+      );
+
+      expect(result.synopsis, 'Nova sinopsi de Karl Marx.');
+      expect(result.coverUrl, 'https://books.google.com/new_cover.jpg');
+      expect(result.pageCount, 120);
+      expect(result.publishedYear, '1848');
+      expect(result.enrichmentAttempts, 1);
+    });
+
     test('enrichAndPersistBook attempts to find missing cover if only synopsis is present', () async {
       int calls = 0;
       final mockClient = MockClient((request) async {
@@ -825,6 +879,98 @@ void main() {
       final service = BookEnrichmentService();
       expect(await service.lookupAuthorByTitle(''), isNull);
       expect(await service.lookupAuthorByTitle('   '), isNull);
+    });
+  });
+
+  group('BookEnrichmentService Gemini AI Synopsis & Fallback', () {
+    test('candidateSynopsisModels includes latest and Gemini 3 models', () {
+      expect(BookEnrichmentService.candidateSynopsisModels, containsAllInOrder([
+        'gemini-flash-latest',
+        'gemini-3.8-flash',
+        'gemini-3.7-flash',
+      ]));
+      expect(BookEnrichmentService.candidateSynopsisModels, contains('gemini-1.5-flash'));
+    });
+
+    test('generateAiSynopsis returns null when title is empty', () async {
+      final service = BookEnrichmentService();
+      final result = await service.generateAiSynopsis(title: '   ');
+      expect(result, isNull);
+    });
+
+    test('generateAiSynopsis generates clean synopsis using injected generator', () async {
+      final service = BookEnrichmentService(
+        aiSynopsisGenerator: ({required title, author, year}) async {
+          return 'Una novel·la clàssica de $author ($year) titulada $title.';
+        },
+      );
+
+      final synopsis = await service.generateAiSynopsis(
+        title: 'Mirall trencat',
+        author: 'Mercè Rodoreda',
+        year: 1974,
+      );
+
+      expect(synopsis, 'Una novel·la clàssica de Mercè Rodoreda (1974) titulada Mirall trencat.');
+    });
+
+    test('enrichAndPersistBook falls back to Gemini when Google Books and Open Library have no synopsis', () async {
+      // Mock HTTP Client: Google Books retorna resultat sense description
+      final mockClient = MockClient((request) async {
+        if (request.url.host == 'www.googleapis.com') {
+          return http.Response(
+            jsonEncode({
+              'items': [
+                {
+                  'volumeInfo': {
+                    'title': 'Obra Sense Descripcio',
+                    'authors': ['Autor Desconegut'],
+                    'imageLinks': {'thumbnail': 'http://books.google.com/cover.jpg'},
+                  }
+                }
+              ]
+            }),
+            200,
+          );
+        } else if (request.url.host == 'openlibrary.org') {
+          return http.Response(
+            jsonEncode({
+              'docs': [
+                {
+                  'title': 'Obra Sense Descripcio',
+                }
+              ]
+            }),
+            200,
+          );
+        }
+        return http.Response('Not found', 404);
+      });
+
+      final service = BookEnrichmentService(
+        httpClient: mockClient,
+        aiSynopsisGenerator: ({required title, author, year}) async {
+          return 'Aquesta obra és una exploració profunda del pensament contemporani.';
+        },
+      );
+
+      final initialBook = BookModel(
+        id: 'book_ai_fallback_test',
+        title: 'Obra Sense Descripcio',
+        author: 'Autor Desconegut',
+        shelfCode: 'E1-B1',
+        positionIndex: 0,
+        createdAt: DateTime.now(),
+      );
+
+      final enriched = await service.enrichAndPersistBook(
+        book: initialBook,
+        libraryId: '',
+      );
+
+      expect(enriched.synopsis, 'Aquesta obra és una exploració profunda del pensament contemporani.');
+      expect(enriched.isAiSynopsis, isTrue);
+      expect(enriched.coverUrl, 'https://books.google.com/cover.jpg');
     });
   });
 }

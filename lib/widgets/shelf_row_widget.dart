@@ -42,18 +42,25 @@ class _ShelfRowWidgetState extends State<ShelfRowWidget> {
   @override
   void didUpdateWidget(covariant ShelfRowWidget oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (widget.highlightedBookId != oldWidget.highlightedBookId) {
+    if (widget.highlightedBookId != oldWidget.highlightedBookId ||
+        widget.searchQuery != oldWidget.searchQuery) {
       _scrollToHighlightedBookIfNeeded();
     }
   }
 
   void _scrollToHighlightedBookIfNeeded() {
-    if (widget.highlightedBookId == null) return;
-
     final sortedBooks = List<BookModel>.from(widget.books)
       ..sort((a, b) => a.positionIndex.compareTo(b.positionIndex));
 
-    final bookIndex = sortedBooks.indexWhere((b) => b.id == widget.highlightedBookId);
+    int bookIndex = -1;
+    if (widget.highlightedBookId != null) {
+      bookIndex = sortedBooks.indexWhere((b) => b.id == widget.highlightedBookId);
+    } else if (widget.searchQuery != null && widget.searchQuery!.trim().isNotEmpty) {
+      final q = widget.searchQuery!.trim().toLowerCase();
+      bookIndex = sortedBooks.indexWhere((b) =>
+          b.title.toLowerCase().contains(q) || b.author.toLowerCase().contains(q));
+    }
+
     if (bookIndex >= 0) {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (_scrollController.hasClients) {

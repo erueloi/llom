@@ -458,6 +458,86 @@ void main() {
       final borrowButton = tester.widget<IconButton>(borrowFinder);
       expect(borrowButton.tooltip, equals('Treure de la balda / Marcar prestat'));
     });
+
+    testWidgets('Displays ai_synopsis_badge when book.isAiSynopsis is true', (tester) async {
+      final bookWithAi = testBook.copyWith(
+        isAiSynopsis: true,
+        synopsis: 'Aquest és un resum generat per Gemini.',
+      );
+
+      await tester.pumpWidget(createTestWidget(
+        book: bookWithAi,
+        bookcase: testBookcase,
+      ));
+
+      await tester.tap(find.byKey(const Key('open_sheet_button')));
+      await tester.pumpAndSettle();
+
+      expect(find.byKey(const Key('ai_synopsis_badge')), findsOneWidget);
+      expect(find.text('✨ Resum generat per IA'), findsOneWidget);
+      expect(find.text('Aquest és un resum generat per Gemini.'), findsOneWidget);
+    });
+
+    testWidgets('Shows generate_ai_synopsis_button when synopsis is empty and updates when tapped', (tester) async {
+      final mockEnrichment = MockBookEnrichmentServiceForDetailSheet(
+        mockAiSynopsis: 'Nova sinopsi generada amb Gemini Flash.',
+      );
+
+      final bookWithoutSynopsis = BookModel(
+        id: 'b_no_synopsis',
+        title: 'Llibre Desconegut',
+        author: 'Autor Anònim',
+        shelfCode: 'bc_test_1-B1',
+        positionIndex: 1,
+        synopsis: null,
+        enrichmentAttempts: 3,
+        createdAt: DateTime.now(),
+      );
+
+      await tester.pumpWidget(createTestWidget(
+        book: bookWithoutSynopsis,
+        bookcase: testBookcase,
+        enrichmentService: mockEnrichment,
+        canEdit: true,
+      ));
+
+      await tester.tap(find.byKey(const Key('open_sheet_button')));
+      await tester.pumpAndSettle();
+
+      final generateBtn = find.byKey(const Key('generate_ai_synopsis_button'));
+      expect(generateBtn, findsOneWidget);
+      expect(find.text('Generar sinopsi amb IA'), findsOneWidget);
+
+      await tester.ensureVisible(generateBtn);
+      await tester.tap(generateBtn);
+      await tester.pumpAndSettle();
+
+      expect(mockEnrichment.generateAiSynopsisCalled, isTrue);
+      expect(find.byKey(const Key('ai_synopsis_badge')), findsOneWidget);
+      expect(find.text('Nova sinopsi generada amb Gemini Flash.'), findsOneWidget);
+      expect(find.byKey(const Key('generate_ai_synopsis_button')), findsNothing);
+    });
+
+    testWidgets('Tapping change_cover_button opens cover source bottom sheet', (tester) async {
+      await tester.pumpWidget(createTestWidget(
+        book: testBook,
+        bookcase: testBookcase,
+        canEdit: true,
+      ));
+
+      await tester.tap(find.byKey(const Key('open_sheet_button')));
+      await tester.pumpAndSettle();
+
+      final changeCoverBtn = find.byKey(const Key('change_cover_button'));
+      expect(changeCoverBtn, findsOneWidget);
+
+      await tester.tap(changeCoverBtn);
+      await tester.pumpAndSettle();
+
+      expect(find.text('Canviar portada del llibre'), findsOneWidget);
+      expect(find.byKey(const Key('cover_source_camera')), findsOneWidget);
+      expect(find.byKey(const Key('cover_source_gallery')), findsOneWidget);
+    });
   });
 
   group('AppScrollBehavior tests', () {
@@ -469,4 +549,39 @@ void main() {
       expect(devices, contains(PointerDeviceKind.trackpad));
     });
   });
+}
+
+class MockBookEnrichmentServiceForDetailSheet extends BookEnrichmentService {
+  final String? mockAiSynopsis;
+  final String? mockUploadedCover;
+  bool generateAiSynopsisCalled = false;
+  bool uploadBookCoverCalled = false;
+
+  MockBookEnrichmentServiceForDetailSheet({
+    this.mockAiSynopsis = 'Resum automàtic generat per Gemini.',
+    this.mockUploadedCover = 'https://example.com/uploaded_cover.jpg',
+  });
+
+  @override
+  Future<String?> generateAiSynopsis({
+    required String title,
+    String? author,
+    int? year,
+    String? apiKeyOverride,
+    dynamic modelOverride,
+  }) async {
+    generateAiSynopsisCalled = true;
+    return mockAiSynopsis;
+  }
+
+  @override
+  Future<String?> uploadBookCover({
+    required String libraryId,
+    required String bookId,
+    required dynamic imageBytes,
+    dynamic storageOverride,
+  }) async {
+    uploadBookCoverCalled = true;
+    return mockUploadedCover;
+  }
 }

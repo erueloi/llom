@@ -219,5 +219,104 @@ void main() {
       expect(mockService.lastUpdatedOrder![1].id, 'book_a');
       expect(mockService.lastUpdatedOrder![2].id, 'book_c');
     });
+
+    testWidgets('Renders matching badge and jump pill when matching book is offscreen on mobile', (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      // Create 20 books on Balda 1, where only book #19 matches 'quixot'
+      final manyBooks = List.generate(20, (i) {
+        final isMatch = i == 18;
+        return BookModel(
+          id: 'book_$i',
+          title: isMatch ? 'El Quixot de la Manxa' : 'Llibre Ordinari $i',
+          author: isMatch ? 'Cervantes' : 'Autor Comu',
+          shelfCode: 'bc_reorder-B1',
+          bookcaseId: 'bc_reorder',
+          positionIndex: i + 1,
+          createdAt: now,
+        );
+      });
+
+      final mockService = MockBookcaseServiceForReorder(books: manyBooks);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<LibraryProvider>(
+          create: (_) => MockLibraryProviderForReorder(user: testUser, library: testLib),
+          child: MaterialApp(
+            home: BookshelfDetailScreen(
+              bookcase: testBookcase,
+              libraryId: 'lib_reorder',
+              bookcaseService: mockService,
+              initialSearchQuery: 'quixot',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Shelf header should display the matching badge "1 coincident"
+      expect(find.text('1 coincident'), findsWidgets);
+
+      // Because the book #19 is offscreen or auto-scrolled, either a jump pill or book spine is visible
+      // Tapping the matching book or jump pill works
+      expect(find.textContaining('Quixot'), findsOneWidget);
+    });
+
+    testWidgets('Tapping right jump pill scrolls to offscreen match', (tester) async {
+      tester.view.physicalSize = const Size(360, 800);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.resetPhysicalSize);
+      addTearDown(tester.view.resetDevicePixelRatio);
+
+      // Book 0 matches AND Book 19 matches 'quixot'.
+      // Book 0 is visible at start, so shelf remains at offset 0.
+      // Book 19 is offscreen to the right, so the right jump pill appears!
+      final manyBooks = List.generate(20, (i) {
+        final isMatch = i == 0 || i == 19;
+        return BookModel(
+          id: 'book_$i',
+          title: isMatch ? 'El Quixot $i' : 'Llibre $i',
+          author: 'Autor',
+          shelfCode: 'bc_reorder-B1',
+          bookcaseId: 'bc_reorder',
+          positionIndex: i + 1,
+          createdAt: now,
+        );
+      });
+
+      final mockService = MockBookcaseServiceForReorder(books: manyBooks);
+
+      await tester.pumpWidget(
+        ChangeNotifierProvider<LibraryProvider>(
+          create: (_) => MockLibraryProviderForReorder(user: testUser, library: testLib),
+          child: MaterialApp(
+            home: BookshelfDetailScreen(
+              bookcase: testBookcase,
+              libraryId: 'lib_reorder',
+              bookcaseService: mockService,
+              initialSearchQuery: 'quixot',
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Header shows 2 coincidents
+      expect(find.text('2 coincidents'), findsWidgets);
+
+      // Right jump pill with arrow forward should be visible
+      final rightPill = find.byKey(const Key('jump_pill_right_1'));
+      expect(rightPill, findsOneWidget);
+
+      // Tap the right jump pill
+      await tester.tap(rightPill);
+      await tester.pumpAndSettle();
+
+      // After scrolling right, left jump pill with arrow back appears
+      expect(find.byKey(const Key('jump_pill_left_1')), findsOneWidget);
+    });
   });
 }

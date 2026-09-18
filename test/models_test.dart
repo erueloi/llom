@@ -128,6 +128,39 @@ void main() {
       expect(updated.coverUrl, 'https://example.com/new.jpg');
     });
 
+    test('resetEnrichment clears all enrichment metadata and attempts', () {
+      final book = BookModel(
+        id: 'b1',
+        title: 'Sense títol',
+        author: 'Desconegut',
+        shelfCode: 'E1-B1',
+        positionIndex: 1,
+        synopsis: 'Sinopsi vella',
+        coverUrl: 'https://example.com/old_cover.jpg',
+        pageCount: 238,
+        publishedYear: '2007',
+        infoUrl: 'https://example.com/old_info',
+        enrichmentAttempts: 3,
+        createdAt: now,
+      );
+
+      final reset = book.resetEnrichment();
+      expect(reset.title, 'Sense títol');
+      expect(reset.synopsis, isNull);
+      expect(reset.coverUrl, isNull);
+      expect(reset.pageCount, isNull);
+      expect(reset.publishedYear, isNull);
+      expect(reset.infoUrl, isNull);
+      expect(reset.enrichmentAttempts, 0);
+
+      final map = reset.toMap();
+      expect(map.containsKey('synopsis'), isTrue);
+      expect(map['synopsis'], isNull);
+      expect(map.containsKey('coverUrl'), isTrue);
+      expect(map['coverUrl'], isNull);
+      expect(map['enrichmentAttempts'], 0);
+    });
+
     test('borrowed fields serialize, deserialize with backwards compatibility, and copyWith works', () {
       final borrowedDate = DateTime(2026, 9, 17, 10, 30);
       final book = BookModel(
@@ -182,6 +215,43 @@ void main() {
         borrowedAt: null,
       );
       expect(returned.isBorrowed, isFalse);
+    });
+
+    test('isAiSynopsis field serializes, deserializes, resets, and works with copyWith', () {
+      final book = BookModel(
+        id: 'b_ai',
+        title: 'El Petit Príncep',
+        author: 'Antoine de Saint-Exupéry',
+        shelfCode: 'E1-B1',
+        positionIndex: 0,
+        synopsis: 'Resum generat per IA.',
+        isAiSynopsis: true,
+        createdAt: now,
+      );
+
+      final map = book.toMap();
+      expect(map['isAiSynopsis'], isTrue);
+
+      final parsed = BookModel.fromMap(map, 'b_ai');
+      expect(parsed.isAiSynopsis, isTrue);
+
+      // Compatibilitat retroactiva: si no té el camp, default a false
+      final legacyMap = {
+        'title': 'Llibre clàssic',
+        'shelfCode': 'E1-B1',
+        'positionIndex': 0,
+        'createdAt': Timestamp.fromDate(now),
+      };
+      final legacyParsed = BookModel.fromMap(legacyMap, 'b_legacy');
+      expect(legacyParsed.isAiSynopsis, isFalse);
+
+      // copyWith
+      final toggled = legacyParsed.copyWith(isAiSynopsis: true);
+      expect(toggled.isAiSynopsis, isTrue);
+
+      // resetEnrichment resets isAiSynopsis to false
+      final reset = book.resetEnrichment();
+      expect(reset.isAiSynopsis, isFalse);
     });
   });
 
