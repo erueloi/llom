@@ -53,9 +53,9 @@ jobs:
             echo "storeFile=upload-keystore.jks" >> android/key.properties
           fi
 
-      # --- Desplegament de Regles de Firestore ---
-      - name: Deploy Firestore Rules
-        if: hashFiles('firestore.rules') != ''
+      # --- Desplegament de Regles de Seguretat (Firestore i Storage) ---
+      - name: Deploy Firebase Rules (Firestore & Storage)
+        if: hashFiles('firestore.rules') != '' || hashFiles('storage.rules') != ''
         env:
           FIREBASE_SA: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_LLOM }}
         run: |
@@ -63,7 +63,7 @@ jobs:
             echo "$FIREBASE_SA" > "$RUNNER_TEMP/firebase-sa.json"
             export GOOGLE_APPLICATION_CREDENTIALS="$RUNNER_TEMP/firebase-sa.json"
             npx --yes firebase-tools@latest deploy \
-              --only firestore:rules \
+              --only firestore:rules,storage \
               --project ${{ vars.FIREBASE_PROJECT_ID || 'llom-23d56' }} \
               --non-interactive
             rm -f "$RUNNER_TEMP/firebase-sa.json"

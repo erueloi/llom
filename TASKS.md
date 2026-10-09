@@ -1150,6 +1150,22 @@
   * Afegits tests a [test/update_service_test.dart](file:///c:/git/llom/test/update_service_test.dart) avaluant `formatVersionDisplay()`, `getLocalVersion()` amb override i l'extracció des de `assets/release_notes.md`.
   * **213 de 213 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
 
+### ✅ Tasca 57: Desplegament i blindatge de les regles de seguretat de Cloud Storage (expiració mode de prova)
+- [x] Diagnòstic de l'avís de Firebase Cloud Storage:
+  * El bucket `llom-23d56.firebasestorage.app` encara mantenia al núvol les regles temporals de «Mode de prova» creades per defecte a la consola de Firebase, les quals tenien una clàusula de caducitat (`request.time < timestamp.date(...)`) a punt d'expirar en 4 dies.
+  * El flux de desplegament a GitHub Actions (`.github/workflows/deploy.yml`) només executava `--only firestore:rules`, deixant fora les regles de Cloud Storage (`storage.rules`).
+- [x] Blindatge de regles de Cloud Storage ([storage.rules](file:///c:/git/llom/storage.rules)):
+  * **Portades de llibres (`/covers/{libraryId}/{bookId}`)**: Lectura pública (perquè les miniatures es mostrin a qualsevol dispositiu) i escriptura restringida a usuaris autenticats amb límit estricte de 10 MB i validació de tipus MIME (`request.resource.contentType.matches('image/.*')`).
+  * **Fotografies de baldes (`/libraries/{libraryId}/{allPaths=**}`)**: Lectura pública i escriptura autenticada amb límit de 20 MB i validació de tipus MIME (`image/.*`).
+  * **Denegació per defecte**: Qualsevol altre camí queda expressament prohibit (`match /{allPaths=**} { allow read, write: if false; }`), eliminant la vulnerabilitat d'escriptura arbitrària i cancel·lant definitivament qualsevol avís de caducitat.
+- [x] Desplegament immediat al núvol:
+  * Executat amb èxit `firebase deploy --only storage` amb el Firebase CLI sobre el projecte `llom-23d56`.
+  * Regles validades, compilades i publicades activament a Firebase Storage (`+ storage: released rules storage.rules to firebase.storage`).
+- [x] Automatització en el pipeline de GitHub Actions ([.github/workflows/deploy.yml](file:///c:/git/llom/.github/workflows/deploy.yml)):
+  * Actualitzat el pas de desplegament a `--only firestore:rules,storage` perquè qualsevol release futura mantingui automàticament sincronitzades tant les regles de Firestore com les de Cloud Storage.
+- [x] Suite de tests i verificacions:
+  * **213 de 213 tests superats (100% èxit)** a `flutter test` i **0 advertències** a `flutter analyze`.
+
 ---
 
 ## 🚀 Propers Passos
